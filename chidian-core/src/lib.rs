@@ -13,8 +13,8 @@ pub type Object = serde_json::Map<String, Value>;
 /// This function traverses a `serde_json::Value` using a selector string 
 /// and returns the (possibly-transformed) result.
 /// 
-/// The selector string can optionally begin with a dot. The following syntax is supported:
-/// - `"users"` or `".users"` - select a field from an object
+/// The selector string syntax is as follows:
+/// - `"users"` - select a field from an object
 /// - `"[0]"` - select an array element by index
 /// - `"[-1]"` - select the last element of an array using negative index
 /// - `"[start:end]"` - select a slice of an array
@@ -42,18 +42,11 @@ pub type Object = serde_json::Map<String, Value>;
 ///     ]
 /// });
 ///
-/// // With leading dot (traditional style)
-/// let result1 = get(&data, ".users[0].name", &[]).unwrap();
-/// 
-/// // Without leading dot (new style)
-/// let result2 = get(&data, "users[0].name", &[]).unwrap();
-/// 
-/// // Using group selector to get multiple fields
-/// let result3 = get(&data, "users[0](.name,.age)", &[]).unwrap();
+/// let result1 = get(&data, "users[0].name", &[]).unwrap();
+/// let result2 = get(&data, "users[0](.name,.age)", &[]).unwrap();
 /// 
 /// assert_eq!(result1, json!("Alice"));
-/// assert_eq!(result2, json!("Alice"));
-/// assert_eq!(result3, json!(["Alice", 30]));
+/// assert_eq!(result2, json!(["Alice", 30]));
 /// ```
 pub fn get(src: &Value, sel_str: &str, ops: &[Box<dyn Transform>]) -> Result<Value> {
     let selector = cache::get_cached_selector(sel_str)?;
@@ -117,12 +110,7 @@ mod tests {
             }
         });
 
-        // Test simple key access with leading dot
-        let selector = Selector::parse(".config.version")?;
-        let result = get_selector(&data, &selector, &[])?;
-        assert_eq!(result, json!("1.0"));
-
-        // Test simple key access without leading dot
+        // Test simple key access
         let selector = Selector::parse("config.version")?;
         let result = get_selector(&data, &selector, &[])?;
         assert_eq!(result, json!("1.0"));

@@ -188,7 +188,7 @@ mod tests {
             }
         });
         
-        let selector = Selector::parse(".user.name").unwrap();
+        let selector = Selector::parse("user.name").unwrap();
         let result = selector.evaluate(&data).unwrap();
         assert_eq!(result, json!("John"));
     }
@@ -203,7 +203,7 @@ mod tests {
             ]
         });
         
-        let selector = Selector::parse(".items[1].name").unwrap();
+        let selector = Selector::parse("items[1].name").unwrap();
         let result = selector.evaluate(&data).unwrap();
         assert_eq!(result, json!("Item 2"));
     }
@@ -214,7 +214,7 @@ mod tests {
             "items": ["a", "b", "c", "d"]
         });
         
-        let selector = Selector::parse(".items[-1]").unwrap();
+        let selector = Selector::parse("items[-1]").unwrap();
         let result = selector.evaluate(&data).unwrap();
         assert_eq!(result, json!("d"));
     }
@@ -225,7 +225,7 @@ mod tests {
             "items": ["a", "b", "c", "d", "e"]
         });
         
-        let selector = Selector::parse(".items[1:3]").unwrap();
+        let selector = Selector::parse("items[1:3]").unwrap();
         let result = selector.evaluate(&data).unwrap();
         assert_eq!(result, json!(["b", "c"]));
     }
@@ -240,7 +240,7 @@ mod tests {
             ]
         });
         
-        let selector = Selector::parse(".users[*].name").unwrap();
+        let selector = Selector::parse("users[*].name").unwrap();
         let result = selector.evaluate(&data).unwrap();
         assert_eq!(result, json!(["Alice", "Bob", "Charlie"]));
     }
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn test_error_key_not_found() {
         let data = json!({ "user": { "name": "John" } });
-        let selector = Selector::parse(".user.email").unwrap();
+        let selector = Selector::parse("user.email").unwrap();
         let result = selector.evaluate(&data);
         assert!(result.is_err());
     }
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn test_error_index_out_of_bounds() {
         let data = json!({ "items": [1, 2, 3] });
-        let selector = Selector::parse(".items[5]").unwrap();
+        let selector = Selector::parse("items[5]").unwrap();
         let result = selector.evaluate(&data);
         assert!(result.is_err());
     }
@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn test_error_type_mismatch() {
         let data = json!({ "name": "John" });
-        let selector = Selector::parse(".name.first").unwrap();
+        let selector = Selector::parse("name.first").unwrap();
         let result = selector.evaluate(&data);
         assert!(result.is_err());
         if let Err(SelectorError::TypeMismatch { expected, found }) = result {
@@ -285,11 +285,11 @@ mod tests {
             ]
         });
         
-        let selector = Selector::parse(".users[0](.name,.age)").unwrap();
+        let selector = Selector::parse("users[0](.name,.age)").unwrap();
         let result = selector.evaluate(&data).unwrap();
         assert_eq!(result, json!(["Alice", 25]));
         
-        let selector = Selector::parse(".users[*](.name,.email)").unwrap();
+        let selector = Selector::parse("users[*](.name,.email)").unwrap();
         let result = selector.evaluate(&data).unwrap();
         assert_eq!(result, json!([["Alice", "alice@example.com"], ["Bob", "bob@example.com"], ["Charlie", "charlie@example.com"]]));
     }

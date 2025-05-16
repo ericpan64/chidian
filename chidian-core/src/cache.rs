@@ -71,10 +71,10 @@ mod tests {
         }
         
         // First parse 
-        let selector1 = get_cached_selector(".user.name")?;
+        let selector1 = get_cached_selector("user.name")?;
         
         // Second parse of same string - should retrieve from cache
-        let selector2 = get_cached_selector(".user.name")?;
+        let selector2 = get_cached_selector("user.name")?;
         
         // Arc pointers should point to same data
         assert!(Arc::ptr_eq(&selector1, &selector2), 

@@ -94,9 +94,9 @@ fn parse_group(input: &str) -> IResult<&str, PathNode> {
     )(input)
 }
 
-// Parse a single path element (either .key or [index] or bare key or group)
+// Parse a single path element (either key.subkey or [index] or group)
 fn parse_path_element(input: &str) -> IResult<&str, PathNode> {
-    alt((parse_key_access, parse_bracket_accessor, parse_group))(input)
+    alt((parse_bracket_accessor, parse_key_access, parse_group))(input)
 }
 
 // Parse a sequence of path elements
@@ -104,19 +104,25 @@ fn parse_path_elements(input: &str) -> IResult<&str, Vec<PathNode>> {
     many0(parse_path_element)(input)
 }
 
-// Parse a selector expression with an optional leading bare key
+// Parse a selector expression with an leading key
 fn parse_full_selector(input: &str) -> IResult<&str, Vec<PathNode>> {
-    let (remaining, first_part) = opt(parse_bare_key)(input)?;
+    // Handle the special case of a selector starting with a bracket
+    if input.starts_with('[') {
+        let (remaining, bracket_node) = parse_bracket_accessor(input)?;
+        let (remaining, rest) = parse_path_elements(remaining)?;
+        
+        let mut nodes = vec![bracket_node];
+        nodes.extend(rest);
+        
+        return Ok((remaining, nodes));
+    }
+    
+    // Normal case: starts with a key
+    let (remaining, first_part) = parse_bare_key(input)?;
     let (remaining, rest) = parse_path_elements(remaining)?;
     
-    let nodes = match first_part {
-        Some(node) => {
-            let mut nodes = vec![node];
-            nodes.extend(rest);
-            nodes
-        },
-        None => rest
-    };
+    let mut nodes = vec![first_part];
+    nodes.extend(rest);
     
     Ok((remaining, nodes))
 }
@@ -129,6 +135,11 @@ pub fn parse_selector(input: &str) -> Result<Vec<PathNode>, String> {
     // Check if input is empty
     if input.is_empty() {
         return Ok(Vec::new());
+    }
+    
+    // Check if input starts with a dot and return a specific error
+    if input.starts_with('.') {
+        return Err(format!("Selector cannot start with a dot. Use '{}' instead.", &input[1..]));
     }
     
     match parse_full_selector(input) {
@@ -208,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_parse_path() {
-        let path = parse_selector(".users[0].name").unwrap();
+        let path = parse_selector("users[0].name").unwrap();
         assert_eq!(path.len(), 3);
         assert!(matches!(path[0], PathNode::Key(ref k) if k == "users"));
         assert!(matches!(path[1], PathNode::Index(0)));
@@ -251,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_parse_complex_path_with_group() {
-        let path = parse_selector(".users(.name,.age)").unwrap();
+        let path = parse_selector("users(.name,.age)").unwrap();
         assert_eq!(path.len(), 2);
         assert!(matches!(path[0], PathNode::Key(ref k) if k == "users"));
         if let PathNode::Group(elements) = &path[1] {
