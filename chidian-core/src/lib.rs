@@ -19,6 +19,7 @@ pub type Object = serde_json::Map<String, Value>;
 /// - `"[-1]"` - select the last element of an array using negative index
 /// - `"[start:end]"` - select a slice of an array
 /// - `"[*]"` - select all elements of an array
+/// - `"(.field1,.field2)"` - select multiple fields as a tuple (returns array)
 /// - `"users[0].name"` - chain selectors to traverse nested structures
 ///
 /// # Arguments
@@ -47,8 +48,12 @@ pub type Object = serde_json::Map<String, Value>;
 /// // Without leading dot (new style)
 /// let result2 = get(&data, "users[0].name", &[]).unwrap();
 /// 
+/// // Using group selector to get multiple fields
+/// let result3 = get(&data, "users[0](.name,.age)", &[]).unwrap();
+/// 
 /// assert_eq!(result1, json!("Alice"));
 /// assert_eq!(result2, json!("Alice"));
+/// assert_eq!(result3, json!(["Alice", 30]));
 /// ```
 pub fn get(src: &Value, sel_str: &str, ops: &[Box<dyn Transform>]) -> Result<Value> {
     let selector = cache::get_cached_selector(sel_str)?;
@@ -131,6 +136,16 @@ mod tests {
         let selector = Selector::parse("config.features[0:2]")?;
         let result = get_selector(&data, &selector, &[])?;
         assert_eq!(result, json!(["auth", "api"]));
+
+        // Test group selector
+        let selector = Selector::parse("users[0](.name,.age)")?;
+        let result = get_selector(&data, &selector, &[])?;
+        assert_eq!(result, json!(["Alice", 30]));
+
+        // Test group selector with wildcard
+        let selector = Selector::parse("users[*](.name)")?;
+        let result = get_selector(&data, &selector, &[])?;
+        assert_eq!(result, json!([["Alice"], ["Bob"]]));
 
         // Test using get
         let result = get(&data, "users[0].age", &[])?;

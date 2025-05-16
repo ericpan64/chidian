@@ -3,7 +3,7 @@ use nom::{
     branch::alt,
     character::complete::{char, digit1, one_of},
     combinator::{map, opt, recognize},
-    multi::{many0},
+    multi::{many0, separated_list0},
     sequence::{delimited, pair, preceded},
 };
 
@@ -74,9 +74,29 @@ fn parse_bare_key(input: &str) -> IResult<&str, PathNode> {
     )(input)
 }
 
-// Parse a single path element (either .key or [index] or bare key)
-fn parse_path_element(input: &str) -> IResult<&str, PathNode> {
+// Parse a group element (can be a key access or bracket accessor)
+fn parse_group_element(input: &str) -> IResult<&str, PathNode> {
     alt((parse_key_access, parse_bracket_accessor))(input)
+}
+
+// Parse a group of items (a, b, c)
+fn parse_group(input: &str) -> IResult<&str, PathNode> {
+    map(
+        delimited(
+            char('('),
+            separated_list0(
+                char(','),
+                parse_group_element
+            ),
+            char(')')
+        ),
+        PathNode::Group
+    )(input)
+}
+
+// Parse a single path element (either .key or [index] or bare key or group)
+fn parse_path_element(input: &str) -> IResult<&str, PathNode> {
+    alt((parse_key_access, parse_bracket_accessor, parse_group))(input)
 }
 
 // Parse a sequence of path elements
@@ -215,5 +235,31 @@ mod tests {
     fn test_parse_empty() {
         let path = parse_selector("").unwrap();
         assert_eq!(path.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_group() {
+        let (_, node) = parse_group("(.first,.second)").unwrap();
+        if let PathNode::Group(elements) = node {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(elements[0], PathNode::Key(ref k) if k == "first"));
+            assert!(matches!(elements[1], PathNode::Key(ref k) if k == "second"));
+        } else {
+            panic!("Expected Group node");
+        }
+    }
+
+    #[test]
+    fn test_parse_complex_path_with_group() {
+        let path = parse_selector(".users(.name,.age)").unwrap();
+        assert_eq!(path.len(), 2);
+        assert!(matches!(path[0], PathNode::Key(ref k) if k == "users"));
+        if let PathNode::Group(elements) = &path[1] {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(elements[0], PathNode::Key(ref k) if k == "name"));
+            assert!(matches!(elements[1], PathNode::Key(ref k) if k == "age"));
+        } else {
+            panic!("Expected Group node");
+        }
     }
 } 

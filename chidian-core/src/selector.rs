@@ -10,6 +10,7 @@ pub enum PathNode {
     Index(isize),          // [0] / [-1]
     Wildcard,              // [*]
     Slice(Option<isize>, Option<isize>), // [start:end]
+    Group(Vec<PathNode>),  // (a, b, c)
 }
 
 #[derive(Debug, Clone)]
@@ -146,6 +147,17 @@ impl Selector {
                     })
                 }
             },
+            PathNode::Group(group) => {
+                let mut results = Vec::new();
+                for item in group {
+                    match self.eval_path(&[item.clone()], current) {
+                        Ok(value) => results.push(value),
+                        // Skip errors in group items
+                        Err(_) => continue,
+                    }
+                }
+                Ok(Value::Array(results))
+            },
         }
     }
 }
@@ -261,5 +273,24 @@ mod tests {
         } else {
             panic!("Expected TypeMismatch error");
         }
+    }
+
+    #[test]
+    fn test_group_selector() {
+        let data = json!({
+            "users": [
+                {"name": "Alice", "age": 25, "email": "alice@example.com"},
+                {"name": "Bob", "age": 30, "email": "bob@example.com"},
+                {"name": "Charlie", "age": 35, "email": "charlie@example.com"}
+            ]
+        });
+        
+        let selector = Selector::parse(".users[0](.name,.age)").unwrap();
+        let result = selector.evaluate(&data).unwrap();
+        assert_eq!(result, json!(["Alice", 25]));
+        
+        let selector = Selector::parse(".users[*](.name,.email)").unwrap();
+        let result = selector.evaluate(&data).unwrap();
+        assert_eq!(result, json!([["Alice", "alice@example.com"], ["Bob", "bob@example.com"], ["Charlie", "charlie@example.com"]]));
     }
 } 
