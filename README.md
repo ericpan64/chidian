@@ -1,5 +1,7 @@
 # chidian - <ins alt="chi">chi</ins>meric <ins alt="d̲">d</ins>ata <ins alt="i̲">i</ins>nterch<ins alt="a̲n̲">an</ins>ge
 
+> Work-in-progress -- v0.1 will be out soon!
+
 chidian is a cross-language framework for composable, readable, and sharable data mappings. We define a "data mapping" as a series of operations that convert one data schema into a well-structured targeted schema. chidian is written in Rust and exports bindings to Python (via PyO3 + maturin -- in-progress) and JavaScript (via wasm-bindgen -- in-progress).
 
 ## Overview
