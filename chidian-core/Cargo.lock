@@ -54,6 +54,7 @@ dependencies = [
  "criterion",
  "nom",
  "once_cell",
+ "serde",
  "serde_json",
  "thiserror",
 ]

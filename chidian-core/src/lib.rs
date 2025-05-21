@@ -1,5 +1,6 @@
 use std::error::Error;
 use serde_json::Value;
+use serde::{Serialize, Deserialize};
 
 pub mod mapper;
 pub mod dicts;
@@ -13,15 +14,9 @@ pub trait Chainable {
     fn name(&self) -> String;
 }
 
-/// Something that is `JsonLike` is a type that can be converted to and from a `serde_json::Value`.
-pub trait JsonLike {
-    fn to_json(&self) -> Result<Value, Box<dyn Error>>;
-    fn from_json(json: Value) -> Result<Self, Box<dyn Error>> where Self: Sized;
-}
-
 /// Represents JSON container types that can hold other values.
 /// Limited to objects (key-value maps) and arrays, which are the only JSON types that can contain other values.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum JsonContainer {
     /// A JSON object (key-value map)
     Object(serde_json::Map<String, Value>),
