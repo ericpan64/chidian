@@ -27,6 +27,7 @@ target/
 .paic/
 tasks/
 CLAUDE.md
+.aider*
 
 # SpecStory explanation file
 .specstory/.what-is-this.md
