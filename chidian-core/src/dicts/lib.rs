@@ -28,21 +28,21 @@ use crate::mapper::MappingContext;
 ///
 /// # Example
 /// ```
-/// use chidian_core::{get, Value};
-/// use serde_json::json;
-///
-/// let data = json!({
-///     "users": [
-///         {"name": "Alice", "age": 30},
-///         {"name": "Bob", "age": 25}
-///     ]
-/// });
-///
-/// let result1 = get(&data, "users[0].name", None).unwrap();
-/// let result2 = get(&data, "users[0].(name, age)", None).unwrap();
-/// 
-/// assert_eq!(result1, json!("Alice"));
-/// assert_eq!(result2, json!(["Alice", 30]));
+// / use chidian_core::dicts::{get, Value};
+// / use serde_json::json;
+// /
+// / let data = json!({
+// /     "users": [
+// /         {"name": "Alice", "age": 30},
+// /         {"name": "Bob", "age": 25}
+// /     ]
+// / });
+// /
+// / let result1 = get(&data, "users[0].name", None).unwrap();
+// / let result2 = get(&data, "users[0].(name, age)", None).unwrap();
+// / 
+// / assert_eq!(result1, json!("Alice"));
+// / assert_eq!(result2, json!(["Alice", 30]));
 /// ```
 pub fn get(source: JsonContainer, key_str: &str, on_success: Option<Box <dyn Chainable>>) -> Result<MappingContext, Box<dyn Error>> {
     // TODO: implement this in conjunction with the `dsl_parser`
