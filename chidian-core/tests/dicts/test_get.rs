@@ -1,5 +1,4 @@
-use serde_json::{json, Value};
-use std::collections::HashMap;
+use serde_json::json;
 
 use chidian_core::JsonContainer;
 use chidian_core::dicts::get;
@@ -8,7 +7,6 @@ use chidian_core::partials as p;
 
 mod fixtures {
     use serde_json::{json, Value};
-    use std::collections::HashMap;
 
     pub fn simple_data() -> Value {
         json!({
