@@ -1,7 +1,8 @@
 use serde_json::Value;
 use std::error::Error;
 
-use crate::{JsonContainer,MappingContext};
+use crate::{JsonContainer, Chainable};
+use crate::mapper::MappingContext;
 
 /// Get a value from a JSON object using a selector.
 ///
@@ -43,7 +44,7 @@ use crate::{JsonContainer,MappingContext};
 /// assert_eq!(result1, json!("Alice"));
 /// assert_eq!(result2, json!(["Alice", 30]));
 /// ```
-pub fn get(source: JsonContainer, key_str: &str, on_success: Option<dyn Chainable>) -> Result<MappingContext, Box<dyn Error>> {
+pub fn get(source: JsonContainer, key_str: &str, on_success: Option<Box <dyn Chainable>>) -> Result<MappingContext, Box<dyn Error>> {
     // TODO: implement this in conjunction with the `dsl_parser`
     // Parse `key_str` into DSL parser components
     // Grab into the data based on the parsed key components
@@ -55,4 +56,7 @@ pub fn get(source: JsonContainer, key_str: &str, on_success: Option<dyn Chainabl
     //      Call `.run` for that function. If it returns an `Ok`, then keep going
     //      Else if unsuccessful, note current key and return appropriate Error (on_success_related) result with reason
     // At this point, this means everything ran successfully! Return the final result
+
+    // ... dummy placeholder
+    Ok(MappingContext::new(Value::Null))
 }

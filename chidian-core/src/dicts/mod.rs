@@ -1,2 +1,2 @@
-pub mod dicts;
-pub use dicts::*;
+pub mod lib;
+pub use lib::*;
