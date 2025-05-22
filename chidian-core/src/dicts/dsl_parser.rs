@@ -41,12 +41,12 @@ pub struct ParsedGetExpr {
 pub fn parse_get_expr(input: &str) -> Result<((), ParsedGetExpr), String> {
     let input = input.trim();
     
-    // Simple tokenization by splitting on dots for top-level units
-    let parts: Vec<&str> = input.split('.').collect();
+    // Split the input into top-level units, handling parentheses properly
+    let parts = split_respecting_parentheses(input, '.')?;
     let mut units = Vec::new();
     
     for part in parts {
-        let part = part.trim();
+        let part = part.as_str().trim();
         if part.is_empty() {
             continue;
         }
@@ -54,11 +54,11 @@ pub fn parse_get_expr(input: &str) -> Result<((), ParsedGetExpr), String> {
         // Check for tuple expression (foo, bar)
         if part.starts_with('(') && part.ends_with(')') {
             let tuple_content = &part[1..part.len()-1];
-            let tuple_parts: Vec<&str> = tuple_content.split(',').collect();
+            let tuple_parts = split_respecting_parentheses(tuple_content, ',')?;
             
             let mut exprs = Vec::new();
             for tuple_part in tuple_parts {
-                let tuple_part = tuple_part.trim();
+                let tuple_part = tuple_part.as_str().trim();
                 if tuple_part.is_empty() {
                     continue;
                 }
@@ -168,4 +168,45 @@ pub fn parse_get_expr(input: &str) -> Result<((), ParsedGetExpr), String> {
     }
     
     Ok(((), ParsedGetExpr { expr: GetExpr { units } }))
+}
+
+/// Split a string by a delimiter while respecting parentheses
+fn split_respecting_parentheses(input: &str, delimiter: char) -> Result<Vec<String>, String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut paren_depth = 0;
+    let mut chars = input.chars().peekable();
+    
+    while let Some(ch) = chars.next() {
+        match ch {
+            '(' => {
+                paren_depth += 1;
+                current.push(ch);
+            },
+            ')' => {
+                paren_depth -= 1;
+                if paren_depth < 0 {
+                    return Err("Unmatched closing parenthesis".to_string());
+                }
+                current.push(ch);
+            },
+            ch if ch == delimiter && paren_depth == 0 => {
+                parts.push(current.trim().to_string());
+                current.clear();
+            },
+            _ => {
+                current.push(ch);
+            }
+        }
+    }
+    
+    if paren_depth != 0 {
+        return Err("Unmatched opening parenthesis".to_string());
+    }
+    
+    if !current.trim().is_empty() {
+        parts.push(current.trim().to_string());
+    }
+    
+    Ok(parts)
 }
