@@ -3,12 +3,9 @@
 // Partial application utility functions for functional programming
 // Ported from Python implementation
 
-use std::cmp::Ordering;
 use std::error::Error;
-use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
 use serde_json::Value;
-use std::collections::HashMap;
 
 use crate::Chainable;
 use crate::mapper::MappingContext;
@@ -329,8 +326,18 @@ pub fn identity() -> Box<dyn Chainable> {
     to_chainable(|value| Ok(value), "identity")
 }
 
-/// Create a chainable that wraps the keep function to work with the Chainable trait
-pub fn keep(n: usize) -> Box<dyn Chainable> {
+/// Returns a function that keeps the first n elements of a vector
+pub fn keep<T>(n: usize) -> ApplyFn<Vec<T>, Vec<T>>
+where
+    T: 'static,
+{
+    Box::new(move |vec| {
+        vec.into_iter().take(n).collect()
+    })
+}
+
+/// Create a chainable that keeps the first n elements of an array value
+pub fn keep_chainable(n: usize) -> Box<dyn Chainable> {
     to_chainable(move |value| {
         match value {
             Value::Array(arr) => {

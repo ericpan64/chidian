@@ -96,10 +96,10 @@ fn test_arithmetic_operations() {
 fn test_keep() {
     let v = vec![1, 2, 3, 4, 5];
     
-    let keep_one_fn = partials::keep::<_, _>(1);
+    let keep_one_fn = partials::keep(1);
     assert_eq!(vec![1], keep_one_fn(v.clone()));
     
-    let keep_more_fn = partials::keep::<_, _>(50);
+    let keep_more_fn = partials::keep(50);
     assert_eq!(v.clone(), keep_more_fn(v.clone()));
     
     // Test with array slice

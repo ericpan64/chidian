@@ -438,7 +438,7 @@ fn test_get_single_key_tuple() {
     let keep_first_two = get(
         source_container.clone(),
         "data.patient.(id, active, missingKey)",
-        Some(p::keep(2))
+        Some(p::keep_chainable(2))
     ).unwrap().data;
     
     let expected_first_two = json!([
