@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::error::Error;
 
-use crate::{JsonContainer, Chainable, Tuple};
+use crate::{JsonContainer, Chainable};
 use crate::mapper::{MappingContext, is_strict_mode, mark_missing_key_accessed};
 use super::dsl_parser::{parse_get_expr, GetActionableUnit, IndexOp, GetExpr};
 
@@ -100,9 +100,8 @@ fn process_tuple(value: &Value, exprs: &[GetExpr]) -> Result<Value, Box<dyn Erro
             for item in arr {
                 results.push(process_tuple(item, exprs)?);
             }
-            // Return a Tuple wrapper instead of a plain array
-            let tuple = Tuple::new(results);
-            Ok(tuple.to_value())
+            // Return a plain array instead of a Tuple wrapper
+            Ok(Value::Array(results))
         },
         _ => {
             // For non-arrays, process each tuple field on the single value
@@ -114,9 +113,8 @@ fn process_tuple(value: &Value, exprs: &[GetExpr]) -> Result<Value, Box<dyn Erro
                 }
                 results.push(current);
             }
-            // Return a Tuple wrapper instead of a plain array
-            let tuple = Tuple::new(results);
-            Ok(tuple.to_value())
+            // Return a plain array instead of a Tuple wrapper
+            Ok(Value::Array(results))
         }
     }
 }
@@ -140,9 +138,8 @@ fn get_field(value: &Value, field_name: &str) -> Result<Value, Box<dyn Error>> {
             let results: Vec<Value> = arr.iter()
                 .map(|item| get_field(item, field_name).unwrap_or(Value::Null))
                 .collect();
-            // Return a Tuple wrapper instead of a plain array
-            let tuple = Tuple::new(results);
-            Ok(tuple.to_value())
+            // Return a plain array instead of a Tuple wrapper
+            Ok(Value::Array(results))
         },
         _ => Err(format!("Cannot access field '{}' on non-object/non-array value", field_name).into())
     }
