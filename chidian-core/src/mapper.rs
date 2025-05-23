@@ -1,9 +1,37 @@
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::error::Error;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
+use std::cell::RefCell;
 
-use crate::{Chainable, DROP, KEEP, JsonContainer};
+use crate::{Chainable, DROP, KEEP};
+
+// Thread-local storage to track if missing keys were accessed in strict mode
+thread_local! {
+    static STRICT_MODE_ENABLED: RefCell<bool> = RefCell::new(false);
+    static MISSING_KEY_ACCESSED: RefCell<bool> = RefCell::new(false);
+}
+
+/// Set strict mode for the current thread
+pub fn set_strict_mode(enabled: bool) {
+    STRICT_MODE_ENABLED.with(|f| *f.borrow_mut() = enabled);
+    MISSING_KEY_ACCESSED.with(|f| *f.borrow_mut() = false);
+}
+
+/// Check if strict mode is enabled
+pub fn is_strict_mode() -> bool {
+    STRICT_MODE_ENABLED.with(|f| *f.borrow())
+}
+
+/// Mark that a missing key was accessed
+pub fn mark_missing_key_accessed() {
+    MISSING_KEY_ACCESSED.with(|f| *f.borrow_mut() = true);
+}
+
+/// Check if a missing key was accessed
+pub fn was_missing_key_accessed() -> bool {
+    MISSING_KEY_ACCESSED.with(|f| *f.borrow())
+}
 
 /// The context for each step in the mapping process
 pub struct MappingContext {
@@ -121,212 +149,338 @@ impl<'a> Mapper<'a> {
         };
     }
 
-    pub fn with_config(&mut self, config: MapperConfig) -> () {
+    pub fn with_config(mut self, config: MapperConfig) -> Self {
         self.config = config;
+        self
+    }
+    
+    /// Helper to detect DROP markers from JSON values
+    fn detect_drop_marker(&self, value: &Value) -> Option<DROP> {
+        // Try deserializing as DROP first
+        if let Ok(drop_type) = serde_json::from_value::<DROP>(value.clone()) {
+            println!("DEBUG: Found DROP via deserialization: {:?}", drop_type);
+            return Some(drop_type);
+        }
+        
+        // Try string-based detection (for when DROP serializes to strings)
+        if let Some(s) = value.as_str() {
+            let result = match s {
+                "ThisObject" => Some(DROP::ThisObject),
+                "Parent" => Some(DROP::Parent),
+                "Grandparent" => Some(DROP::Grandparent),
+                "GreatGrandparent" => Some(DROP::GreatGrandparent),
+                _ => None,
+            };
+            if result.is_some() {
+                println!("DEBUG: Found DROP via string detection: {:?} from string: {:?}", result, s);
+            }
+            result
+        } else {
+            None
+        }
+    }
+
+    /// Helper to detect KEEP wrappers from JSON values
+    fn detect_keep_wrapper(&self, value: &Value) -> Option<Value> {
+        // Only try to deserialize as KEEP if it's an object that looks like a KEEP struct
+        if let Some(obj) = value.as_object() {
+            // Try object-based detection first (for when KEEP serializes to objects)
+            if obj.len() == 1 && obj.contains_key("value") {
+                return obj.get("value").cloned();
+            }
+            
+            // Try deserializing as KEEP only if it looks like a KEEP object
+            if let Ok(keep) = serde_json::from_value::<KEEP>(value.clone()) {
+                return Some(keep.value);
+            }
+        }
+        
+        None
     }
 
     pub fn map(&self, data: Value) -> Result<Value, Box<dyn Error>> {
-        // TODO: Handle the different config options (remove_empty, strict, use_nesting_cache)
+        // Set up strict mode for this mapping operation
+        set_strict_mode(self.config.strict);
+        
         // Create a new MappingContext
         let context = MappingContext::new(data);
+        
         // Run the mapping function
         let result_context = self.mapping_fn.run(context)?;
-        // TODO: Clean-up + handle the enums accordingly (DROP, KEEP)
-        Ok(result_context.data)
+        
+        // Check if strict mode was violated
+        if self.config.strict && was_missing_key_accessed() {
+            return Err("Strict mode violation: missing key was accessed".into());
+        }
+        
+        // Process the result to handle DROP and KEEP markers
+        let processed = self.process_drops_and_keeps(result_context.data)?;
+        
+        // Remove empty values if configured
+        let final_result = if self.config.remove_empty {
+            self.remove_empty_values_with_keep(processed)
+        } else {
+            processed
+        };
+        
+        Ok(final_result)
+    }
+    
+    /// Process DROP markers and KEEP wrappers in the JSON structure
+    fn process_drops_and_keeps(&self, value: Value) -> Result<Value, Box<dyn Error>> {
+        let result = self.process_value_with_ancestry(value, &[])?;
+        // If the root object gets dropped, return an empty object instead of null
+        if result.is_null() {
+            Ok(json!({}))
+        } else {
+            Ok(result)
+        }
+    }
+    
+    fn process_value_with_ancestry(&self, value: Value, ancestry: &[String]) -> Result<Value, Box<dyn Error>> {
+        match value {
+            Value::Object(map) => {
+                let mut result = serde_json::Map::new();
+                let mut should_drop_this_object = false;
+                
+                for (key, val) in map {
+                    let mut new_ancestry = ancestry.to_vec();
+                    new_ancestry.push(key.clone());
+                    
+                    // Check if this value is a KEEP wrapper first - preserve it but process the wrapped value
+                    if let Some(keep_value) = self.detect_keep_wrapper(&val) {
+                        // Process the wrapped value and mark it as KEEP for later preservation
+                        let processed_wrapped = self.process_value_with_ancestry(keep_value, &new_ancestry)?;
+                        // Mark this as a KEEP value so it's preserved during empty removal
+                        let keep_marker = json!({"__KEEP_MARKER__": processed_wrapped});
+                        result.insert(key, keep_marker);
+                        continue;
+                    }
+                    
+                    // Check if this value is a DROP marker
+                    if let Some(drop_type) = self.detect_drop_marker(&val) {
+                        let drop_depth = match drop_type {
+                            DROP::ThisObject => 1,
+                            DROP::Parent => 2,
+                            DROP::Grandparent => 3,
+                            DROP::GreatGrandparent => 4,
+                        };
+                        
+                        if drop_depth > new_ancestry.len() {
+                            return Err("Cannot DROP: Not enough container depth in ancestry".into());
+                        }
+                        
+                        if drop_depth == 1 {
+                            // Drop the current container (this object)
+                            should_drop_this_object = true;
+                            break;
+                        } else {
+                            // For deeper drops, propagate upward 
+                            return Ok(json!({"__DROP_DEPTH__": drop_depth - 1}));
+                        }
+                    }
+                    
+                    // Process the value recursively
+                    let processed_val = self.process_value_with_ancestry(val, &new_ancestry)?;
+                    
+                    // Check if the processed value signals a drop
+                    if let Some(obj) = processed_val.as_object() {
+                        if obj.contains_key("__DROP_MARKER__") {
+                            // This object should be dropped - don't include it
+                            continue;
+                        } else if let Some(depth_val) = obj.get("__DROP_DEPTH__") {
+                            if let Some(depth) = depth_val.as_u64() {
+                                if depth == 1 {
+                                    // This object should be dropped
+                                    should_drop_this_object = true;
+                                    break;
+                                } else if depth > 1 {
+                                    return Ok(json!({"__DROP_DEPTH__": depth - 1}));
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Only exclude values that are drop signals, not regular null values
+                    if processed_val.as_object().map_or(true, |o| !o.contains_key("__DROP_MARKER__") && !o.contains_key("__DROP_DEPTH__")) {
+                        result.insert(key, processed_val);
+                    }
+                }
+                
+                if should_drop_this_object {
+                    Ok(Value::Null)
+                } else {
+                    Ok(Value::Object(result))
+                }
+            },
+            Value::Array(arr) => {
+                let mut result = Vec::new();
+                let mut should_drop_this_array = false;
+                
+                for (index, val) in arr.into_iter().enumerate() {
+                    let mut new_ancestry = ancestry.to_vec();
+                    new_ancestry.push(index.to_string());
+                    
+                    // Check if this value is a KEEP wrapper first - preserve it but process the wrapped value
+                    if let Some(keep_value) = self.detect_keep_wrapper(&val) {
+                        // Process the wrapped value and mark it as KEEP for later preservation
+                        let processed_wrapped = self.process_value_with_ancestry(keep_value, &new_ancestry)?;
+                        // Mark this as a KEEP value so it's preserved during empty removal
+                        let keep_marker = json!({"__KEEP_MARKER__": processed_wrapped});
+                        result.push(keep_marker);
+                        continue;
+                    }
+                    
+                    // Check if this value is a DROP marker
+                    if let Some(drop_type) = self.detect_drop_marker(&val) {
+                        let drop_depth = match drop_type {
+                            DROP::ThisObject => 1,
+                            DROP::Parent => 2,
+                            DROP::Grandparent => 3,
+                            DROP::GreatGrandparent => 4,
+                        };
+                        
+
+                        
+                        if drop_depth > new_ancestry.len() {
+                            return Err("Cannot DROP: Not enough container depth in ancestry".into());
+                        }
+                        
+                        if drop_depth == 1 {
+                            // Drop the current container (this array)
+                            should_drop_this_array = true;
+                            break;
+                        } else {
+                            // For deeper drops, propagate upward
+                            return Ok(json!({"__DROP_DEPTH__": drop_depth - 1}));
+                        }
+                    }
+                    
+                    // Process the value recursively
+                    let processed_val = self.process_value_with_ancestry(val, &new_ancestry)?;
+                    
+                    // Check if the processed value signals a drop
+                    if let Some(obj) = processed_val.as_object() {
+                        if obj.contains_key("__DROP_MARKER__") {
+                            // Skip this item - it should be dropped
+                            continue;
+                        } else if let Some(depth_val) = obj.get("__DROP_DEPTH__") {
+                            if let Some(depth) = depth_val.as_u64() {
+                                if depth == 1 {
+                                    should_drop_this_array = true;
+                                    break;
+                                } else if depth > 1 {
+                                    return Ok(json!({"__DROP_DEPTH__": depth - 1}));
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Only exclude values that are drop signals, not regular null values
+                    if processed_val.as_object().map_or(true, |o| !o.contains_key("__DROP_MARKER__") && !o.contains_key("__DROP_DEPTH__")) {
+                        result.push(processed_val);
+                    }
+                }
+                
+                if should_drop_this_array {
+                    Ok(Value::Null)
+                } else {
+                    Ok(Value::Array(result))
+                }
+            },
+            _ => {
+                // Handle KEEP wrapper - unwrap but don't process further
+                if let Some(keep_value) = self.detect_keep_wrapper(&value) {
+                    Ok(keep_value)
+                } else {
+                    Ok(value)
+                }
+            }
+        }
+    }
+    
+    /// Remove empty values while preserving KEEP-wrapped values
+    fn remove_empty_values_with_keep(&self, value: Value) -> Value {
+        match value {
+            Value::Object(map) => {
+                let mut result = serde_json::Map::new();
+                for (key, val) in map {
+                    // Check if this value is marked as KEEP
+                    if let Some(obj) = val.as_object() {
+                        if let Some(keep_value) = obj.get("__KEEP_MARKER__") {
+                            // Always preserve KEEP values regardless of emptiness
+                            result.insert(key, keep_value.clone());
+                            continue;
+                        }
+                        if let Some(keep_array) = obj.get("__KEEP_ARRAY_MARKER__") {
+                            // Always preserve KEEP arrays regardless of emptiness
+                            result.insert(key, keep_array.clone());
+                            continue;
+                        }
+                    }
+                    
+                    // Check if this value is KEEP-wrapped (fallback)
+                    if let Some(keep_value) = self.detect_keep_wrapper(&val) {
+                        // Always preserve KEEP values regardless of emptiness
+                        result.insert(key, keep_value);
+                    } else {
+                        let processed = self.remove_empty_values_with_keep(val);
+                        
+                        // Check if the processed value is a KEEP array marker
+                        if let Some(obj) = processed.as_object() {
+                            if let Some(keep_array) = obj.get("__KEEP_ARRAY_MARKER__") {
+                                result.insert(key, keep_array.clone());
+                                continue;
+                            }
+                        }
+                        
+                        if self.has_content(&processed) {
+                            result.insert(key, processed);
+                        }
+                    }
+                }
+                Value::Object(result)
+            },
+            Value::Array(arr) => {
+                let mut result = Vec::new();
+                let mut had_keep_markers = false;
+                for val in arr {
+                    // Check if this value is marked as KEEP
+                    if let Some(obj) = val.as_object() {
+                        if let Some(keep_value) = obj.get("__KEEP_MARKER__") {
+                            // Always preserve KEEP values
+                            result.push(keep_value.clone());
+                            had_keep_markers = true;
+                            continue;
+                        }
+                    }
+                    
+                    // Check if this value is KEEP-wrapped (fallback)
+                    if let Some(keep_value) = self.detect_keep_wrapper(&val) {
+                        // Always preserve KEEP values
+                        result.push(keep_value);
+                        had_keep_markers = true;
+                    } else {
+                        let processed = self.remove_empty_values_with_keep(val);
+                        if self.has_content(&processed) {
+                            result.push(processed);
+                        }
+                    }
+                }
+                
+                // If this array had KEEP markers, mark it for preservation
+                if had_keep_markers {
+                    // Mark the array as having KEEP content so it's preserved
+                    json!({"__KEEP_ARRAY_MARKER__": result})
+                } else {
+                    Value::Array(result)
+                }
+            },
+            _ => value,
+        }
+    }
+    
+    fn has_content(&self, value: &Value) -> bool {
+        crate::has_content(value)
     }
 }
-
-// // Custom serialization/deserialization methods for Mapper
-// impl<'a> Mapper<'a> {
-//     // TODO: Make this work correctly. Also figure out semantics for `mapping_fn` (e.g. best way to serialize/deserialize a function?)
-//     pub fn to_json(&self) -> Result<Value, Box<dyn Error>> {
-//         // Create a serializable representation
-//         let mut map = serde_json::Map::new();
-        
-//         // We can't serialize the function reference directly
-//         // This would need custom handling based on your requirements
-//         map.insert("mapping_fn".to_string(), Value::String("function_reference".to_string()));
-        
-//         // Serialize the config
-//         map.insert("config".to_string(), serde_json::to_value(&self.config)?);
-        
-//         Ok(Value::Object(map))
-//     }
-
-//     // TODO: Same as above
-//     pub fn from_json(json: Value) -> Result<Self, Box<dyn Error>> {
-//         // Custom deserialization needed since we can't automatically deserialize the function
-//         let config = serde_json::from_value::<MapperConfig>(
-//             json.get("config").cloned().unwrap_or(Value::Null)
-//         )?;
-        
-//         // This is a placeholder - we still need to figure out how to handle mapping_fn
-//         let mapping_fn_str = json.get("mapping_fn").and_then(|v| v.as_str()).unwrap_or_default();
-        
-//         // This part would need custom handling based on how you're storing the function
-//         // For now, this is just a placeholder that won't compile
-//         Err("Deserialization of Mapper is not fully implemented yet".into())
-//     }
-
-//     // TODO: Pseudocode for mapper.rs to handle DROP enum, verify logic
-//     /// Process a DROP instruction during mapping
-//     /// 
-//     /// This function should be called when a DROP enum value is encountered
-//     /// during the mapping process. It determines which container in the
-//     /// ancestry chain should be deleted based on the DROP variant.
-//     ///
-//     /// Parameters:
-//     /// - drop_type: The DROP enum value indicating which relative object to remove
-//     /// - ancestry: A stack or list representing the path from root to current value
-//     ///             Each entry contains the container and the key/index used to access its child
-//     ///
-//     /// Returns:
-//     /// - MappingContext with modified structure where the specified container is removed
-//     fn handle_drop(drop_type: DROP, ancestry: &[ContainerContext]) -> Result<MappingContext, Box<dyn Error>> {
-//         // Determine depth based on DROP variant
-//         let depth = match drop_type {
-//             DROP::ThisObject => 0,
-//             DROP::Parent => 1,
-//             DROP::Grandparent => 2,
-//             DROP::GreatGrandparent => 3,
-//         };
-        
-//         // Check if we have enough ancestry depth
-//         if ancestry.len() <= depth {
-//             return Err("Cannot DROP: Not enough container depth in ancestry".into());
-//         }
-        
-//         // Get the container to be removed and its parent
-//         let target_index = ancestry.len() - 1 - depth;
-        
-//         // If we're dropping the root object
-//         if target_index == 0 {
-//             // Create empty result
-//             return Ok(MappingContext::new_empty());
-//         }
-        
-//         // Get the parent of the container to be dropped
-//         let parent_index = target_index - 1;
-//         let parent = &ancestry[parent_index];
-        
-//         // Get access information (key or index) for the target in its parent
-//         let access_info = &ancestry[target_index].access_info;
-        
-//         // Remove the target from its parent
-//         let mut modified_context = MappingContext::clone_from_ancestry(ancestry, parent_index);
-        
-//         match parent.container {
-//             JsonContainer::Object(ref mut map) => {
-//                 if let AccessInfo::Key(key) = access_info {
-//                     map.remove(key);
-//                 } else {
-//                     return Err("Invalid access info for object container".into());
-//                 }
-//             },
-//             JsonContainer::Array(ref mut vec) => {
-//                 if let AccessInfo::Index(idx) = access_info {
-//                     if *idx < vec.len() {
-//                         vec.remove(*idx);
-//                     } else {
-//                         return Err("Array index out of bounds".into());
-//                     }
-//                 } else {
-//                     return Err("Invalid access info for array container".into());
-//                 }
-//             }
-//         }
-        
-//         Ok(modified_context)
-//     }
-
-//     // Pseudocode for mapper.rs to handle KEEP struct:
-
-//     /// Process a value that might be wrapped in KEEP during mapping
-//     /// 
-//     /// This function should be called when processing values that might be
-//     /// wrapped in KEEP, especially during the remove_empty_values operation.
-//     ///
-//     /// Parameters:
-//     /// - value: The JSON value to check for KEEP wrapping
-//     /// - is_removing_empty: Whether we're currently in a remove_empty operation
-//     ///
-//     /// Returns:
-//     /// - The unwrapped value if it's a KEEP, otherwise the original value
-//     /// - A boolean indicating if this value should be preserved regardless of emptiness
-//     fn process_keep_value(value: &Value, is_removing_empty: bool) -> (Value, bool) {
-//         // Try to deserialize as KEEP
-//         if let Ok(keep) = serde_json::from_value::<KEEP>(value.clone()) {
-//             // If we're removing empty values, indicate this should be preserved
-//             if is_removing_empty {
-//                 return (keep.value, true);
-//             } else {
-//                 // Just unwrap the value
-//                 return (keep.value, false);
-//             }
-//         }
-        
-//         // Not a KEEP value
-//         (value.clone(), false)
-//     }
-
-//     /// Enhanced version of remove_empty_values for use in the mapper
-//     /// 
-//     /// This integrates with the mapping context to properly handle KEEP values
-//     /// during the empty value removal process.
-//     ///
-//     /// Parameters:
-//     /// - context: The current mapping context containing the value to process
-//     ///
-//     /// Returns:
-//     /// - Updated mapping context with empty values removed, but KEEP values preserved
-//     fn mapper_remove_empty_values(context: MappingContext) -> Result<MappingContext, Box<dyn Error>> {
-//         let value = context.value();
-        
-//         // Process the value, checking for KEEP wrapping at each level
-//         let process_value = |v: Value| -> Value {
-//             // If this is a KEEP-wrapped value, preserve it regardless of emptiness
-//             if let Ok(keep) = serde_json::from_value::<KEEP>(v.clone()) {
-//                 return keep.value;
-//             }
-            
-//             match v {
-//                 Value::Object(map) => {
-//                     let mut result = serde_json::Map::new();
-//                     for (k, item) in map {
-//                         // Process each child value
-//                         let processed = process_value(item);
-//                         let (unwrapped, preserve) = process_keep_value(&processed, true);
-                        
-//                         // Keep the value if it has content or is explicitly marked for preservation
-//                         if preserve || has_content(&unwrapped) {
-//                             result.insert(k, unwrapped);
-//                         }
-//                     }
-//                     Value::Object(result)
-//                 },
-//                 Value::Array(arr) => {
-//                     let mut result = Vec::new();
-//                     for item in arr {
-//                         // Process each array item
-//                         let processed = process_value(item);
-//                         let (unwrapped, preserve) = process_keep_value(&processed, true);
-                        
-//                         // Keep the value if it has content or is explicitly marked for preservation
-//                         if preserve || has_content(&unwrapped) {
-//                             result.push(unwrapped);
-//                         }
-//                     }
-//                     Value::Array(result)
-//                 },
-//                 // Other primitive values remain unchanged
-//                 _ => v,
-//             }
-//         };
-        
-//         // Process the root value
-//         let processed = process_value(value);
-        
-//         // Create a new mapping context with the processed value
-//         Ok(MappingContext::new(processed))
-//     }
-// }

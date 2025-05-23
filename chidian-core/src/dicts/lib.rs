@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::error::Error;
 
 use crate::{JsonContainer, Chainable};
-use crate::mapper::MappingContext;
+use crate::mapper::{MappingContext, is_strict_mode, mark_missing_key_accessed};
 use super::dsl_parser::{parse_get_expr, GetActionableUnit, IndexOp, GetExpr};
 
 /// Get a value from a JSON object using a selector.
@@ -122,7 +122,13 @@ fn get_field(value: &Value, field_name: &str) -> Result<Value, Box<dyn Error>> {
         Value::Object(obj) => {
             match obj.get(field_name) {
                 Some(val) => Ok(val.clone()),
-                None => Err(format!("Field '{}' not found", field_name).into())
+                None => {
+                    // Mark that a missing key was accessed if we're in strict mode
+                    if is_strict_mode() {
+                        mark_missing_key_accessed();
+                    }
+                    Err(format!("Field '{}' not found", field_name).into())
+                }
             }
         },
         Value::Array(arr) => {

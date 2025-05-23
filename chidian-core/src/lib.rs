@@ -42,7 +42,7 @@ pub trait Chainable {
 /// //     ]
 /// // }
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DROP {
     /// Drop the object that directly contains the current value (-1)
     ThisObject,
@@ -93,6 +93,12 @@ impl TryFrom<Value> for JsonContainer {
 pub struct KEEP {
     /// The value to be preserved even if it would be considered "empty"
     pub value: Value,
+}
+
+impl KEEP {
+    pub fn new(value: Value) -> Self {
+        KEEP { value }
+    }
 }
 
 /// Checks if a JSON value has "content" (is not empty).
