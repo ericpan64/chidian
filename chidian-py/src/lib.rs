@@ -199,11 +199,23 @@ fn json_to_python(py: Python, value: &Value) -> PyResult<PyObject> {
             Ok(py_list.into_py(py))
         },
         Value::Object(obj) => {
-            let py_dict = PyDict::new(py);
+            // Check if this is a tuple marker
+            if let (Some(Value::Bool(true)), Some(Value::Array(values))) = 
+                (obj.get("__tuple__"), obj.get("values")) {
+                // Convert to Python tuple
+                let py_items: PyResult<Vec<PyObject>> = values.iter()
+                    .map(|v| json_to_python(py, v))
+                    .collect();
+                let py_tuple = PyTuple::new(py, py_items?)?;
+                Ok(py_tuple.into_py(py))
+            } else {
+                // Regular object
+                let py_dict = PyDict::new(py);
             for (key, value) in obj {
                 py_dict.set_item(key, json_to_python(py, value)?)?;
             }
             Ok(py_dict.into_py(py))
+            }
         }
     }
 }
