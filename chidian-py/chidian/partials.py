@@ -1,6 +1,14 @@
+"""
+Partial function utilities for working with nested data structures.
+
+This module provides utilities for creating partial functions and transformations
+that can be used with the get() function and Mapper class.
+"""
+
 from typing import Any, Callable, Iterable, Union
 from functools import partial
 import operator
+import chidian_py  # The compiled Rust module
 
 
 def get(
@@ -20,41 +28,31 @@ def get(
         A function that takes a source and returns the extracted value
     """
     def _get(source: Union[dict, list]) -> Any:
-        try:
-            # Split the key by dots and traverse the nested structure
-            keys = key.split('.')
-            current = source
-            
-            for k in keys:
-                if isinstance(current, dict):
-                    current = current[k]
-                elif isinstance(current, list):
-                    current = current[int(k)]
-                else:
-                    raise KeyError(f"Cannot access key '{k}' on {type(current)}")
-                    
-            # Apply functions if provided
-            if apply is not None:
-                if callable(apply):
-                    current = apply(current)
-                elif hasattr(apply, '__iter__'):
-                    for func in apply:
-                        current = func(current)
-                        
-            return current
-            
-        except (KeyError, IndexError, ValueError, TypeError):
-            # Apply function to default if provided
-            if apply is not None and default is not None:
-                if callable(apply):
-                    return apply(default)
-                elif hasattr(apply, '__iter__'):
-                    result = default
-                    for func in apply:
-                        result = func(result)
-                    return result
-            return default
-            
+        # Use the Rust implementation
+        result = chidian_py.get(
+            source=source,
+            key=key,
+            default=default,
+            apply=apply,
+            only_if=None,
+            _drop_level=None,
+            flatten=False,
+            strict=None
+        )
+        
+        # If the result is the default value and we have apply functions,
+        # we need to apply them to the default since the Rust implementation
+        # might not be doing this correctly
+        if result == default and apply is not None and default is not None:
+            if callable(apply):
+                return apply(default)
+            elif hasattr(apply, '__iter__'):
+                current = default
+                for func in apply:
+                    current = func(current)
+                return current
+        
+        return result
     return _get
 
 
