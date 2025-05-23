@@ -101,6 +101,34 @@ impl KEEP {
     }
 }
 
+/// A Tuple wrapper that distinguishes tuples from regular arrays in JSON representation.
+/// 
+/// This is particularly useful for Python bindings where tuples and lists are different types.
+/// When serialized to JSON, tuples are represented as objects with a special marker.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tuple {
+    /// Marker to identify this as a tuple in JSON
+    #[serde(rename = "__tuple__")]
+    pub is_tuple: bool,
+    /// The tuple values
+    pub values: Vec<Value>,
+}
+
+impl Tuple {
+    /// Create a new tuple with the given values
+    pub fn new(values: Vec<Value>) -> Self {
+        Tuple {
+            is_tuple: true,
+            values,
+        }
+    }
+    
+    /// Convert the tuple to a serde_json::Value
+    pub fn to_value(&self) -> Value {
+        serde_json::to_value(self).unwrap_or(Value::Null)
+    }
+}
+
 /// Checks if a JSON value has "content" (is not empty).
 /// 
 /// A value is considered to have content if:
