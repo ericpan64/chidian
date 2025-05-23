@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from chidian import Mapper, get
-from chidian.dicts.mapper import mapping_context
+from chidian.context import mapping_context
 from chidian.lib.types import DROP, KEEP
 
 

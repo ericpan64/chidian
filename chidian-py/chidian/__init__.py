@@ -6,7 +6,7 @@ including partial function application, data extraction, and transformation.
 """
 
 from . import partials
-from .dict_utils import get
+from .dicts import get
 from .mapper import Mapper
 from .context import mapping_context
 
