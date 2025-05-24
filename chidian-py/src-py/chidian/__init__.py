@@ -11,7 +11,7 @@ from .mapper import Mapper
 from .context import mapping_context
 
 # Import types from Python modules
-from .lib.types import (
+from .types import (
     DROP,
     KEEP,
     DropLevel,

@@ -6,7 +6,7 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "chidian-py"
+name = "chidian"
 source = { editable = "." }
 
 [package.dev-dependencies]

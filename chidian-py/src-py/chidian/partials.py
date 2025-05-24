@@ -8,7 +8,7 @@ that can be used with the get() function and Mapper class.
 from typing import Any, Callable, Iterable, Union
 from functools import partial
 import operator
-import chidian_py  # The compiled Rust module
+from . import chidian  # The compiled Rust module
 
 
 def get(
@@ -29,7 +29,7 @@ def get(
     """
     def _get(source: Union[dict, list]) -> Any:
         # Use the Rust implementation
-        result = chidian_py.get(
+        result = chidian.get(
             source=source,
             key=key,
             default=default,

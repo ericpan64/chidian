@@ -1,8 +1,8 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple, PyAny};
 use serde_json::Value;
-use chidian_core::{JsonContainer, flatten_sequence};
-use chidian_core::dicts::get as core_get;
+use ::chidian_core::{JsonContainer, flatten_sequence};
+use ::chidian_core::dicts::get as core_get;
 
 /// Get a value from a nested data structure using a key path.
 /// 
@@ -222,7 +222,7 @@ fn json_to_python(py: Python, value: &Value) -> PyResult<PyObject> {
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn chidian_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn chidian(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get, m)?)?;
     Ok(())
 }

@@ -4,7 +4,7 @@ import pytest
 
 from chidian import Mapper, get
 from chidian.context import mapping_context
-from chidian.lib.types import DROP, KEEP
+from chidian.types import DROP, KEEP
 
 
 def test_drop(simple_data: dict[str, Any]) -> None:

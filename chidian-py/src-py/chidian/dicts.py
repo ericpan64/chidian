@@ -1,6 +1,6 @@
 from typing import Any, Callable, Iterable, Union
 
-import chidian_py  # The compiled Rust module
+from . import chidian  # The compiled Rust module
 
 # Type aliases for clarity
 ApplyFunc = Callable[[Any], Any]
@@ -44,7 +44,7 @@ def get(
     Returns:
         The extracted value, possibly transformed
     """
-    return chidian_py.get(
+    return chidian.get(
         source=source,
         key=key,
         default=default,
