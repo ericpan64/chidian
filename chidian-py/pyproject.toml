@@ -11,13 +11,6 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
-
 [tool.maturin]
 features = ["pyo3/extension-module"]
-python-source = "src-py"
-
-[dependency-groups]
-dev = [
-    "maturin>=1.8.6",
-    "pytest>=8.3.5",
-]
+python-source = "chidian"
