@@ -53,7 +53,7 @@ We can balance the expressiveness of then nesting through the expressive structu
 In Python:
 ```python
 from chidian import get, DictPiper, StringMapper
-from chidian.seeds import MERGE, FLAT, MAIN, COAL
+from chidian.seeds import MERGE, FLATTEN, DEFAULT, COALESE
 import chidian.partials as p
 
 from pydantic import BaseModel
@@ -72,7 +72,7 @@ def A_to_B_fn(source: A) -> B:
     address_formatter = MERGE(
         template="{street}\n{city}\n{state}\n{postal_code}\n{country}",
         sources={
-            'street': FLAT('street[*]', p.join("\n")),
+            'street': FLATTEN('street[*]', p.join("\n")),
             'city': 'city',
             'state': 'state', 
             'postal_code': 'postal_code',
@@ -85,10 +85,10 @@ def A_to_B_fn(source: A) -> B:
         "full_name": MERGE(
             template="{prefix} {first} {given} {suffix}",
             sources={
-                'prefix': COAL('name.prefix', KEEP('')),
+                'prefix': COALESCE('name.prefix', KEEP('')),
                 'first': 'name.first',
-                'given': FLAT('name.given[*]', p.join(" ")),
-                'suffix': COAL('name.suffix', KEEP(''))
+                'given': FLATTEN('name.given[*]', p.join(" ")),
+                'suffix': COALESCE('name.suffix', KEEP(''))
             },
             apply=[p.remove_empty, p.join(" ")]
         ),
@@ -171,4 +171,4 @@ chidian aims to solve these issues by taking stronger opinions on common operati
 
 ## Contributing
 
-All contributions welcome! Please open a PR and tag me -- I'll make sure to get back to you!
+All contributions welcome! Please open an Issue and tag me -- I'll make sure to get back to you and we can scope out a PR.

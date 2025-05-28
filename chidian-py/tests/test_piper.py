@@ -1,6 +1,6 @@
 from structstest import SimpleData
 
-from chidian import get, Piper
+from chidian import get, DictPiper
 
 
 

@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from chidian import Piper, get
+from chidian import DictPiper, get
 from chidian.seeds import DROP, KEEP
 
 
@@ -25,7 +25,7 @@ def test_drop(simple_data: dict[str, Any]) -> None:
             ],
         }
 
-    piper = Piper(mapping, remove_empty=True)
+    piper = DictPiper(mapping, remove_empty=True)
     res = piper(source)
     assert res == {"CASE_parent_keep": {"CASE_curr_keep": {"id": get(source, "data.patient.id")}}}
 
@@ -36,7 +36,7 @@ def test_drop_out_of_bounds() -> None:
     def mapping(_: dict[str, Any]) -> dict[str, Any]:
         return {"parent": {"CASE_no_grandparent": DROP.GREATGRANDPARENT}}
 
-    piper = Piper(mapping)
+    piper = DictPiper(mapping)
     with pytest.raises(RuntimeError):
         _ = piper(source)
 
@@ -50,7 +50,7 @@ def test_drop_exact_level() -> None:
             "other_data": 123,
         }
 
-    piper = Piper(mapping)
+    piper = DictPiper(mapping)
     res = piper(source)
     assert res == {}
 
@@ -70,7 +70,7 @@ def test_drop_repeat() -> None:
             ],
         }
 
-    piper = Piper(mapping)
+    piper = DictPiper(mapping)
     res = piper(source)
     assert res == {"partially_dropped": ["first_kept", "third_kept"]}
 
@@ -93,7 +93,7 @@ def test_keep() -> None:
             "removed_empty_list": [],
         }
 
-    piper = Piper(mapping)
+    piper = DictPiper(mapping)
     res = piper(source)
     assert KEEP({}).value == dict()
     assert KEEP([]).value == list()
