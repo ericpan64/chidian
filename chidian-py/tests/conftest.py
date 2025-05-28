@@ -1,7 +1,16 @@
 from typing import Any
 from pydantic import BaseModel
 
+import json
 import pytest
+
+def test_A() -> dict[str, Any]:
+    with open("tests/A.json", "r") as f:
+        return json.load(f)
+
+def test_B() -> dict[str, Any]:
+    with open("tests/B.json", "r") as f:
+        return json.load(f)
 
 def simple_nested_list() -> list[dict[str, Any]]:
     return [
