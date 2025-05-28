@@ -57,23 +57,10 @@ def test_nested_get(nested_data: dict[str, Any]) -> None:
     assert get(source, "data[*].patient.active") == [True, False, True, True]
     assert get(source, "data[*].patient.id") == ["abc123", "def456", "ghi789", "jkl101112"]
     assert get(source, "data[*].patient.ints") == [[1, 2, 3], [4, 5, 6], [7, 8, 9], None]
-    assert get(source, "data[*].patient.ints", flatten=True) == [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        None
-    ]
     assert get(source, "data[*].patient.dicts[*].num") == [[1, 2], [3, 4], [5, 6], [7]]
-    assert get(source, "data[*].patient.dicts[*].num", flatten=True) == [1, 2, 3, 4, 5, 6, 7]
     assert get(source, "missing.key") is None
     assert get(source, "missing[*].key") is None
-    assert get(source, "missing[*].key[*].here", flatten=True) is None
+    assert get(source, "missing[*].key[*].here") is None
     assert get(source, "data[8888].patient") is None
 
 
@@ -138,8 +125,6 @@ def test_get_single_key_tuple(simple_data: dict[str, Any]) -> None:
         source["data"]["patient"]["active"],
     )
 
-    # Test only_if filtering
-    assert get(source, "data.patient.(id, active, missingKey)", only_if=lambda _: False) is None
 
 
 def test_get_nested_key_tuple(nested_data: dict[str, Any]) -> None:
