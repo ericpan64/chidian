@@ -38,17 +38,17 @@ fn get(
         traverse_path(py, source, &path, false)?
     };
     
-    // Apply functions if provided
+    // Handle default value first
     let mut final_result = result;
-    if let Some(functions) = apply {
-        final_result = apply_functions(py, final_result, functions)?;
-    }
-    
-    // Handle default value
     if final_result.bind(py).is_none() {
         if let Some(default_val) = default {
-            return Ok(default_val.to_object(py));
+            final_result = default_val.to_object(py);
         }
+    }
+    
+    // Apply functions if provided (to the final result, including defaults)
+    if let Some(functions) = apply {
+        final_result = apply_functions(py, final_result, functions)?;
     }
     
     Ok(final_result)
