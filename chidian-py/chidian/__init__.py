@@ -1,4 +1,5 @@
-from .lib import get, put
+from .chidian import get
+from .lib import put
 from .collection import DataCollection
 from .piper import DictPiper
 from .seeds import DROP, KEEP, ELIF, COALESCE, SPLIT, MERGE, FLATTEN, DEFAULT
