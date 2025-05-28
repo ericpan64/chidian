@@ -1,4 +1,4 @@
-from .structstest import SimpleData
+from structstest import SimpleData
 
 from chidian import get, Piper
 

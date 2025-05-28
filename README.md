@@ -29,7 +29,7 @@ The file structure is organized into the core abstractions of the library (re-or
     ├── chidian
     │   ├── __init__.py
     │   ├── lib.py      # `get` + `put` -- the core functions (bi-directional inverses)
-    │   ├── group.py    # `DictGroup` + `DataShard` -- the core data wrappers (use in conjunction with Pydantic `BaseModel`s)
+    │   ├── group.py    # `DataCollection` -- the core data wrapper (use in conjunction with Pydantic `BaseModel`s)
     │   ├── mapper.py   # `StringMapper` + `StructMapper` -- the core mapping logic expressed as readable `dict[str, Any]`
     │   ├── piper.py    # `DictPiper` -- the core mapping runtime/execution class
     │   ├── seeds.py    # `DROP`, `KEEP`, etc. -- utilities to help keep readings mappable (Piper processes them)
@@ -168,3 +168,7 @@ chidian aims to solve these issues by taking stronger opinions on common operati
 1. **Prefer iteration over exactness**: Instead of crashing at the first error... just keep going. With data, we learn as we iterate and use what we need!
 2. **Prefer using functions as objects**: Simplify code by passing functions as first-class objects -- a feature of many modern programming languages.
 3. **Prefer JSON-like structures**: No toml, yaml, xml -- just JSON (for now...).
+
+## Contributing
+
+All contributions welcome! Please open a PR and tag me -- I'll make sure to get back to you!

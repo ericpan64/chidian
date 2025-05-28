@@ -68,42 +68,6 @@ def list_data() -> list[Any]:
 
 
 @pytest.fixture(scope="function")
-def simple_dataframe() -> pl.DataFrame:
-    return pl.DataFrame(
-        {
-            "a": [0, 1, 2, 3, 4, 5],
-            "b": ["q", "w", "e", "r", "t", "y"],
-            "c": [True, False, True, False, False, True],
-            "d": [None, None, None, None, None, None],
-        }
-    )
-
-
-@pytest.fixture(scope="function")
-def nested_dataframe() -> pl.DataFrame:
-    """
-    NOTE: In Polars, the structure is maintained between object-typed columns
-    E.g. expect to see the following for `simple_nesting`:
-        {"patient": {"id": "abc123", "active": True}},
-        {"patient": {"id": "def456", "active": True}},
-        {"patient": {"id": "ghi789", "active": False}},
-        {"patient": {"id": None, "active": None}},
-        {"patient": {"id": None, "active": None}},
-      as-opposed to the last 2 values just being `None`
-    """
-    return pl.DataFrame(
-        {
-            # Wrap in `pl.Series` to allow for different lengths, backfill with `NaN`
-            "simple_nesting": pl.Series(simple_nested_list()).extend_constant(
-                None, 2
-            ),  # len: 3 + 2
-            "deep_nesting": pl.Series(deep_nested_list()).extend_constant(None, 1),  # len: 4 + 1
-            "a": pl.Series([0, 1, 2, 3, 4]),  # len: 5
-        }
-    )
-
-
-@pytest.fixture(scope="function")
 def simple_data() -> dict[str, Any]:
     return {
         "data": {"patient": {"id": "abc123", "active": True}},

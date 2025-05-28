@@ -28,6 +28,7 @@ target/
 tasks/
 CLAUDE.md
 .aider*
+codebase.md
 
 # SpecStory explanation file
 .specstory/.what-is-this.md

@@ -1,4 +1,6 @@
 
+from typing import Any, Callable
+
 """
 A `DictPiper` 
 

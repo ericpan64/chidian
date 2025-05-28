@@ -16,7 +16,7 @@ dependencies = [
 ]
 [tool.maturin]
 features = ["pyo3/extension-module"]
-python-source = "chidian"
+python-source = "."
 
 [dependency-groups]
 dev = [
