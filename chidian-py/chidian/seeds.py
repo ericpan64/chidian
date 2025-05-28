@@ -14,12 +14,11 @@ MappingFunc: TypeAlias = Callable[..., dict[str, Any]]
 
 class DROP(Enum):
     """
-    A DeleteRelativeObjectPlaceholder (abbrv. DROP) is a placeholder object that indicates
-      the object relative to the current value should be dropped. An "object" in this context
-      is a dict or a list.
+    A DROP placeholder object indicates the object relative to the current value should be dropped. 
+      An "object" in this context is a dict or a list.
 
     Examples:
-
+    ```
     {   <-- Grandparent (rel to _value)
         'A': {   <-- Parent (rel to _value)
             'B': {      <-- This Object (rel to _value)
@@ -27,7 +26,9 @@ class DROP(Enum):
             }
         }
     }
+    ```
 
+    ```
     {   <-- Grandparent (rel to _value1 and _value2)
         'A': [  <-- Parent (rel to _value1 and _value2)
             {       <-- This Object (rel to _value1)
@@ -38,6 +39,7 @@ class DROP(Enum):
             }
         ]
     }
+    ```
     """
 
     THIS_OBJECT = -1
@@ -63,18 +65,21 @@ class ELIF:
     ...
 
 "Coalesce -- grab first one"
-class GRAB:
+class COALESCE:
     ...
 
-
+"Split -- make more nested"
 class SPLIT:
     ...
 
+"Merge -- make less nested, follow merge template"
 class MERGE:
     ...
 
-class FLAT:
+"Flat -- make less nested, flatten everything"
+class FLATTEN:
     ...
 
+"Default value if multiple options available"
 class DEFAULT:
     ...

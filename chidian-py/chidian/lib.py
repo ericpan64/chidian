@@ -1,5 +1,7 @@
 from typing import Any, Iterable
 
+from pydantic import BaseModel
+
 """
 `get` is a pure function that provides a convenient DSL for grabbing data from a nested dictionary or list.
 """
@@ -26,4 +28,12 @@ def get(
     - `apply`: Use to safely chain operations on a successful get
     - `flatten`: Use to flatten the final result (e.g. nested lists)
     """
+    ...
+
+"""
+`put` is a pure function that re-combines a combination of dicts or `DataShard`s into a Pydantic model
+
+(IDEA: it's the inverse of `get`, allows re-composing data into structs, and assumes that string key name will match)
+"""
+def put(...) -> ...:
     ...

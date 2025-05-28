@@ -1,0 +1,45 @@
+{
+    "name": {
+        "first": "Bob",
+        "given": [
+            "S",
+            "Figgens"
+        ],
+        "prefix": null,
+        "suffix": "Sr."
+    },
+    "address": {
+        "current": {
+            "street": [
+                "123 Privet Drive",
+                "Little Whinging"
+            ],
+            "city": "Surrey",
+            "state": "England",
+            "postal_code": "AB12 3CD",
+            "country": "United Kingdom"
+        },
+        "previous": [
+            {
+                "street": [
+                    "221B Baker Street",
+                    "Marylebone"
+                ],
+                "city": "London",
+                "state": "England",
+                "postal_code": "NW1 6XE",
+                "country": "United Kingdom"
+            },
+            {
+                "street": [
+                    "12 Grimmauld Place",
+                    "Islington"
+                ],
+                "city": "London",
+                "state": "England",
+                "postal_code": "N1 3AX",
+                "country": "United Kingdom"
+            }
+        ]
+    }
+}

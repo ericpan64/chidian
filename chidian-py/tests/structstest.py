@@ -30,9 +30,5 @@ class SimpleData(BaseModel):
     data: dict[str, Any]
     list_data: list[dict[str, Any]]
 
-
 class NestedData(BaseModel):
     data: list[PatientData]
-
-
-
