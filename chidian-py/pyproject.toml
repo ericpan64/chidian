@@ -11,6 +11,14 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
+dependencies = [
+    "pydantic>=2.10.6",
+]
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "chidian"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
