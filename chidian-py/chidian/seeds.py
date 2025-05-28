@@ -60,3 +60,21 @@ class ELIF:
     """
     An ELIF object contains a conditional statement and a dictionary which outlines the possible outcomes
     """
+    ...
+
+"Coalesce -- grab first one"
+class GRAB:
+    ...
+
+
+class SPLIT:
+    ...
+
+class MERGE:
+    ...
+
+class FLAT:
+    ...
+
+class DEFAULT:
+    ...

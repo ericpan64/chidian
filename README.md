@@ -100,45 +100,40 @@ into this result JSON B (note: we take the end of the `previous` list):
 
 In Python:
 ```python
-from chidian import get, Mapper
+from chidian import get, Mapper, StringMapper
+from chidian.seeds import MERGE, FLAT, DEFAULT
 import chidian.partials as p
 
 def A_to_B_fn(source: dict) -> dict:
-    # Define components as objects (allows reuse)
-    address_key = "address.current.(street[*], city, state, postal_code, country)"
-    address_ops = [p.flatten_lists, p.remove_empty, p.join("\n")]
+    # Define reusable address formatter using MERGE
+    address_formatter = MERGE(
+        template="{street}\n{city}\n{state}\n{postal_code}\n{country}",
+        sources={
+            'street': FLAT('street[*]', p.join("\n")),
+            'city': 'city',
+            'state': 'state', 
+            'postal_code': 'postal_code',
+            'country': 'country'
+        }
+    )
 
     # Quickly see data mapping in way that matches the data schema
     return {
-        "full_name": get(source, "name.(prefix, first, given[*], suffix)", 
-                        apply=[p.flatten_lists, p.remove_empty, p.join(" ")]),
-        "current_address": get(source, address_key, apply=address_ops),
-        "last_previous_address": get(source, address_key, apply=address_ops)
+        "full_name": MERGE(
+            template="{prefix} {first} {given} {suffix}",
+            sources={
+                'prefix': DEFAULT('name.prefix', ''),
+                'first': 'name.first',
+                'given': FLAT('name.given[*]', p.join(" ")),
+                'suffix': DEFAULT('name.suffix', '')
+            },
+            apply=[p.remove_empty, p.join(" ")]
+        ),
+        "current_address": get(source, "address.current", apply=[address_formatter]),
+        "last_previous_address": get(source, "address.previous[-1]", apply=[address_formatter])
     }
 
 A_to_B_mapper = Mapper(mapping_fn=A_to_B_fn)
-```
-
-In JavaScript:
-```javascript
-import { get, Mapper } from 'chidian';
-import * as p from 'chidian/partials';
-
-const A_to_B_fn = (source) => {
-    // Define components as objects (allows reuse)
-    const addressKey = "address.current.(street[*], city, state, postal_code, country)";
-    const addressOps = [p.flatten_lists, p.remove_empty, p.join("\n")];
-
-    // Quickly see data mapping in way that matches the data schema
-    return {
-        full_name: get(source, "name.(prefix, first, given[*], suffix)", 
-                    { apply: [p.flatten_lists, p.remove_empty, p.join(" ")] }),
-        current_address: get(source, addressKey, { apply: addressOps }),
-        last_previous_address: get(source, addressKey, { apply: addressOps })
-    };
-};
-
-const A_to_B_mapper = new Mapper({ mapping_fn: A_to_B_fn });
 ```
 
 ### B -> A
@@ -146,110 +141,42 @@ const A_to_B_mapper = new Mapper({ mapping_fn: A_to_B_fn });
 In Python:
 ```python
 from chidian import get, Mapper
+from chidian.seeds import SPLIT, ELIF
 import chidian.partials as p
 
 def B_to_A_fn(source: dict) -> dict:
-    # Parse name
-    parsed_name = get(source, "full_name", apply=[p.split(" ")])
-    # Check if prefix and suffix (assume can tell with ".")
-    has_prefix = "." in parsed_name[0] if parsed_name else False
-    has_suffix = "." in parsed_name[-1] if parsed_name else False
-    has_both = has_prefix and has_suffix
-    # Parse address
-    parsed_current_address = get(source, "current_address", apply=[p.split("\n")])
-    parsed_last_previous_address = get(source, "last_previous_address", apply=[p.split("\n")])
+    # Define name parsing with pattern matching
+    name_splitter = SPLIT(
+        pattern=" ",  # Split on spaces
+        targets={
+            'prefix': {'index': 0, 'condition': lambda s: "." in s},
+            'first': {'index': 0, 'skip_if': 'prefix'},
+            'given': {'slice': (1, -1), 'adjust_for': ['prefix', 'suffix']},
+            'suffix': {'index': -1, 'condition': lambda s: "." in s}
+        }
+    )
+    
+    # Define address parsing with positional mapping
+    address_splitter = SPLIT(
+        pattern="\n",  # Split on newlines
+        targets={
+            'street': {'slice': (0, 2)},
+            'city': {'index': 2},
+            'state': {'index': 3},
+            'postal_code': {'index': 4},
+            'country': {'index': 5}
+        }
+    )
+    
     return {
-        "name": {
-            "first": parsed_name[1] if has_prefix else parsed_name[0],
-            "given": parsed_name[p.case({
-                has_both: slice(2,-2),
-                has_suffix: slice(1,-2),
-                has_prefix: slice(2,-1),
-                True: slice(1,-1)
-            })],
-            "prefix": parsed_name[0] if has_prefix else None,
-            "suffix": parsed_name[-1] if has_suffix else None
-        },
+        "name": get(source, "full_name", apply=[name_splitter]),
         "address": {
-            "current": {
-                "street": [
-                    parsed_current_address[0],
-                    parsed_current_address[1] 
-                ],
-                "city": parsed_current_address[2],
-                "state": parsed_current_address[3],
-                "postal_code": parsed_current_address[4],
-                "country": parsed_current_address[5]
-            },
-            "previous": [{
-                "street": [
-                    parsed_last_previous_address[0],
-                    parsed_last_previous_address[1] 
-                ],
-                "city": parsed_last_previous_address[2],
-                "state": parsed_last_previous_address[3],
-                "postal_code": parsed_last_previous_address[4],
-                "country": parsed_last_previous_address[5]
-            }]
+            "current": get(source, "current_address", apply=[address_splitter]),
+            "previous": [
+                get(source, "last_previous_address", apply=[address_splitter])
+            ]
         }
     }
 
 B_to_A_mapper = Mapper(mapping_fn=B_to_A_fn)
-```
-
-In JavaScript:
-```javascript
-import { get, Mapper } from 'chidian';
-import * as p from 'chidian/partials';
-
-const B_to_A_fn = (source) => {
-    // Parse name
-    const parsed_name = get(source, "full_name", { apply: [p.split(" ")] });
-    // Check if prefix and suffix (assume can tell with ".")
-    const has_prefix = parsed_name ? parsed_name[0].includes(".") : false;
-    const has_suffix = parsed_name ? parsed_name[parsed_name.length - 1].includes(".") : false;
-    const has_both = has_prefix && has_suffix;
-    
-    // Parse address
-    const parsed_current_address = get(source, "current_address", { apply: [p.split("\n")] });
-    const parsed_last_previous_address = get(source, "last_previous_address", { apply: [p.split("\n")] });
-    
-    return {
-        "name": {
-        "first": has_prefix ? parsed_name[1] : parsed_name[0],
-        "given": parsed_name[p.case({
-            [has_both]: { start: 2, end: -2 },
-            [has_suffix]: { start: 1, end: -2 },
-            [has_prefix]: { start: 2, end: -1 },
-            [true]: { start: 1, end: -1 }
-        })],
-        "prefix": has_prefix ? parsed_name[0] : null,
-        "suffix": has_suffix ? parsed_name[parsed_name.length - 1] : null
-        },
-        "address": {
-        "current": {
-            "street": [
-            parsed_current_address[0],
-            parsed_current_address[1]
-            ],
-            "city": parsed_current_address[2],
-            "state": parsed_current_address[3],
-            "postal_code": parsed_current_address[4],
-            "country": parsed_current_address[5]
-        },
-        "previous": [{
-            "street": [
-            parsed_last_previous_address[0],
-            parsed_last_previous_address[1]
-            ],
-            "city": parsed_last_previous_address[2],
-            "state": parsed_last_previous_address[3],
-            "postal_code": parsed_last_previous_address[4],
-            "country": parsed_last_previous_address[5]
-        }]
-        }
-    };
-};
-
-const B_to_A_mapper = new Mapper({ mapping_fn: B_to_A_fn });
 ```

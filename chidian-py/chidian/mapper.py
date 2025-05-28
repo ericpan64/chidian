@@ -1,44 +1,59 @@
 from typing import Any
 
 """
-A `Mapper` is a class that converts between two objects of the same class or subclass.
+Base class for data transformation between different representations.
+
+A Mapper defines how to convert data from one format to another, supporting
+use cases like healthcare data interoperability (FHIR ↔ OMOP).
 """
 # Make this a Python protocol
 class Mapper(dict):
     ...
 
 """
-A `StringMapper` provides convenient two-way lookup of strings with the same semantic meaning
-   For one-to-one mappings, lookup in both directions are supported. 
-   For many-to-one / one-to-many mappings, the first value is taken as a default
-    ```
-    some_string_mapper = StringMapper({
-        'a': 'b',
-        ('c', 'd'): 'e',
-    })
-    some_string_mapper['a'] == 'b'
-    some_string_mapper['b'] == 'a'
-    some_string_mapper['c''] == 'e'
-    some_string_mapper['e'] == 'c'   # default is 'c' since it comes first
-    ```
+Bidirectional string mapper for code/terminology translations.
 
-   For one-to-many mappings, a default value is specified out of the possible options. E.g.
-    ```
-    some_string_mapper = StringMapper({
-        'a': ('b', 'c'), # Default is 'b', since it comes first
-    })
-    some_string_mapper['a'] == 'b'   # default is 'b'
-    some_string_mapper['b'] == 'a'
-    some_string_mapper['c'] == 'a'
-    ```
+Primary use case: Medical code system mappings (e.g., LOINC ↔ SNOMED).
+Supports both one-to-one and many-to-one relationships with automatic
+reverse lookup generation.
 
+Examples:
+    Simple code mapping:
+    >>> loinc_to_snomed = StringMapper({'8480-6': '271649006'})
+    >>> loinc_to_snomed['8480-6']  # Forward lookup
+    '271649006'
+    >>> loinc_to_snomed['271649006']  # Reverse lookup
+    '8480-6'
+    
+    Many-to-one mapping (first value is default):
+    >>> mapper = StringMapper({('LA6699-8', 'LA6700-4'): 'absent'})
+    >>> mapper['absent']  # Returns first key as default
+    'LA6699-8'
 """
 class StringMapper(Mapper):
     def __call__(self, key: str | tuple) -> str | tuple:
         ...
 
 """
-A `StructMapper` provides mapping between two Pydantic models in a single direction
+Flexible structure mapper for complex data transformations.
+
+Handles all non-string mappings including:
+- Nested ↔ flat conversions (FHIR resources ↔ OMOP tables)
+- Conditional field inclusion/exclusion
+- Array flattening and restructuring
+- Complex field transformations with custom logic
+
+Integrates with seeds (DROP, KEEP, ELIF) for fine-grained control over
+which fields to include based on data conditions.
+
+Example:
+    >>> fhir_to_omop = StructMapper({
+    ...     'person_id': 'subject.reference',
+    ...     'value': {
+    ...         'source': 'valueQuantity.value',
+    ...         'condition': lambda o: 'valueQuantity' in o
+    ...     }
+    ... })
 """
 class StructMapper(Mapper):
 
