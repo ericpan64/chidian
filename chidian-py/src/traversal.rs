@@ -99,13 +99,28 @@ pub fn traverse_path_strict(
                 PathSegment::Slice(start, end) => {
                     if let Ok(list) = item_ref.downcast::<PyList>() {
                         let len = list.len() as i32;
-                        let start_idx = start.unwrap_or(0).max(0) as usize;
-                        let end_idx = end.unwrap_or(len).min(len) as usize;
                         
-                        let slice_items: Vec<PyObject> = (start_idx..end_idx)
-                            .filter_map(|i| list.get_item(i).ok())
-                            .map(|item| item.to_object(py))
-                            .collect();
+                        // Handle negative indices Python-style
+                        let start_idx = match start {
+                            Some(s) if *s < 0 => (len + s).max(0) as usize,
+                            Some(s) => (*s).min(len).max(0) as usize,
+                            None => 0,
+                        };
+                        
+                        let end_idx = match end {
+                            Some(e) if *e < 0 => (len + e).max(0) as usize,
+                            Some(e) => (*e).min(len).max(0) as usize,
+                            None => len as usize,
+                        };
+                        
+                        let slice_items: Vec<PyObject> = if start_idx <= end_idx {
+                            (start_idx..end_idx)
+                                .filter_map(|i| list.get_item(i).ok())
+                                .map(|item| item.to_object(py))
+                                .collect()
+                        } else {
+                            Vec::new()
+                        };
                         
                         next.push(PyList::new(py, slice_items)?.to_object(py));
                     } else {
@@ -228,13 +243,28 @@ pub fn traverse_path(
                 PathSegment::Slice(start, end) => {
                     if let Ok(list) = item_ref.downcast::<PyList>() {
                         let len = list.len() as i32;
-                        let start_idx = start.unwrap_or(0).max(0) as usize;
-                        let end_idx = end.unwrap_or(len).min(len) as usize;
                         
-                        let slice_items: Vec<PyObject> = (start_idx..end_idx)
-                            .filter_map(|i| list.get_item(i).ok())
-                            .map(|item| item.to_object(py))
-                            .collect();
+                        // Handle negative indices Python-style
+                        let start_idx = match start {
+                            Some(s) if *s < 0 => (len + s).max(0) as usize,
+                            Some(s) => (*s).min(len).max(0) as usize,
+                            None => 0,
+                        };
+                        
+                        let end_idx = match end {
+                            Some(e) if *e < 0 => (len + e).max(0) as usize,
+                            Some(e) => (*e).min(len).max(0) as usize,
+                            None => len as usize,
+                        };
+                        
+                        let slice_items: Vec<PyObject> = if start_idx <= end_idx {
+                            (start_idx..end_idx)
+                                .filter_map(|i| list.get_item(i).ok())
+                                .map(|item| item.to_object(py))
+                                .collect()
+                        } else {
+                            Vec::new()
+                        };
                         
                         next.push(PyList::new(py, slice_items)?.to_object(py));
                     } else {
