@@ -3,6 +3,7 @@ from .lib import put
 from .collection import DataCollection
 from .piper import DictPiper
 from .seeds import DROP, KEEP, CASE, COALESCE, SPLIT, MERGE, FLATTEN
+from .mapper import StringMapper
 
 __all__ = [
     "get",
@@ -16,4 +17,5 @@ __all__ = [
     "SPLIT",
     "MERGE",
     "FLATTEN",
+    "StringMapper",
 ]
