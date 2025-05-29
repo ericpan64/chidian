@@ -7,7 +7,7 @@ placeholders with `...` in the source code.
 
 import pytest
 from chidian import get, DictPiper
-from chidian.seeds import MERGE, FLATTEN, COALESCE, SPLIT, DROP, KEEP
+from chidian.seeds import MERGE, FLATTEN, COALESCE, SPLIT, DROP, KEEP, CASE
 
 def test_get_function_basic():
     """Test basic get function as shown in README."""
@@ -64,20 +64,29 @@ def test_readme_a_to_b_transformation():
         ]
     }
     
-    # Create mapper function following README pattern
+    # Create mapper function using new SEED processing approach
     def mapper(data):
         return {
-            "full_name": MERGE("name[0].given[0]", "name[0].family", template="{} {}")(data),
+            "full_name": MERGE("name[0].given[0]", "name[0].family", template="{} {}").process(data),
             "date_of_birth": get(data, "birthDate"),
-            "administrative_gender": get(data, "gender"),
+            "administrative_gender": CASE("gender", {
+                "male": "Male",
+                "female": "Female",
+                "other": "Other"
+            }, default="Unknown").process(data),
             "old_address": MERGE(
                 "address[-1].line[0]",
                 "address[-1].city",
                 "address[-1].postalCode",
                 template="{}\n{}, {}"
-            )(data),
-            "all_ids": FLATTEN(["id"], delimiter=", ")(data),
-            "mrn": COALESCE(["id"], default="unknown")(data)  # Simplified - no MR identifier in test data
+            ).process(data),
+            "all_ids": FLATTEN(["id"], delimiter=", ").process(data),
+            "mrn": COALESCE(["id"], default="unknown").process(data),
+            "address_type": CASE("address[-1].use", {
+                "home": "🏠 Home Address",
+                "work": "🏢 Work Address", 
+                "old": "📍 Previous Address"
+            }, default="📮 Other Address").process(data)
         }
     
     # Execute transformation
@@ -87,10 +96,11 @@ def test_readme_a_to_b_transformation():
     # Verify expected output
     assert result["full_name"] == "Pieter van de Heuvel"
     assert result["date_of_birth"] == "1944-11-17"
-    assert result["administrative_gender"] == "male"
+    assert result["administrative_gender"] == "Male"  # Transformed via CASE
     assert result["old_address"] == "Oudergracht 7\nUtrecht, 3511 AE"
     assert result["all_ids"] == "f001"
-    assert result["mrn"] == "f001"  # Falls back to id since no MR identifier
+    assert result["mrn"] == "f001"
+    assert result["address_type"] == "📍 Previous Address"
 
 
 def test_readme_b_to_a_transformation():
@@ -105,9 +115,9 @@ def test_readme_b_to_a_transformation():
         "mrn": "f001"
     }
     
-    # Create reverse mapper function
+    # Create reverse mapper function using new SEED API
     def mapper(data):
-        address_parts = data.get("old_address", "").split("\n")
+        address_parts = get(data, "old_address").split("\n") if get(data, "old_address") else []
         city_postal = address_parts[1].split(", ") if len(address_parts) > 1 else ["", ""]
         
         return {
@@ -115,10 +125,17 @@ def test_readme_b_to_a_transformation():
             "id": get(data, "mrn"),
             "name": [{
                 "use": "official",
-                "given": [SPLIT("full_name", pattern=" ", part=0)(data)],
-                "family": " ".join(get(data, "full_name").split(" ")[1:]) if get(data, "full_name") else ""
+                "given": [SPLIT("full_name", " ", 0).process(data)],
+                "family": SPLIT("full_name", " ", 1, then=lambda x: " ".join(get(data, "full_name").split(" ")[1:]) if x else "").process(data)
             }],
-            "gender": get(data, "administrative_gender"),
+            "gender": CASE("administrative_gender", {
+                "Male": "male",
+                "Female": "female", 
+                "Other": "other",
+                "male": "male",  # Handle the case where it's already lowercase
+                "female": "female",
+                "other": "other"
+            }, default="unknown").process(data),
             "birthDate": get(data, "date_of_birth"),
             "address": [{
                 "use": "old",
@@ -137,7 +154,7 @@ def test_readme_b_to_a_transformation():
     assert result["id"] == "f001"
     assert result["name"][0]["given"][0] == "Pieter"
     assert result["name"][0]["family"] == "van de Heuvel"
-    assert result["gender"] == "male"
+    assert result["gender"] == "male"  # Reverse transformed via CASE
     assert result["birthDate"] == "1944-11-17"
     assert result["address"][0]["line"][0] == "Van Egmondkade 23"
     assert result["address"][0]["city"] == "Amsterdam"
@@ -145,7 +162,7 @@ def test_readme_b_to_a_transformation():
 
 
 def test_merge_seed():
-    """Test MERGE seed functionality from README."""
+    """Test MERGE seed functionality from README using new API."""
     data = {
         "firstName": "John",
         "lastName": "Doe",
@@ -154,19 +171,19 @@ def test_merge_seed():
     
     # Test basic merge
     merge_fn = MERGE("firstName", "lastName", template="{} {}")
-    assert merge_fn(data) == "John Doe"
+    assert merge_fn.process(data) == "John Doe"
     
     # Test merge with missing values
     merge_fn_skip = MERGE("firstName", "missing", "lastName", template="{} {} {}", skip_none=True)
-    assert merge_fn_skip(data) == "John Doe"
+    assert merge_fn_skip.process(data) == "John Doe"
     
     # Test merge with all values
     merge_fn_all = MERGE("firstName", "middleName", "lastName", template="{} {} {}")
-    assert merge_fn_all(data) == "John James Doe"
+    assert merge_fn_all.process(data) == "John James Doe"
 
 
 def test_flatten_seed():
-    """Test FLATTEN seed functionality from README."""
+    """Test FLATTEN seed functionality from README using new API."""
     data = {
         "ids": ["123", "456", "789"],
         "codes": ["A", "B", "C"]
@@ -174,15 +191,15 @@ def test_flatten_seed():
     
     # Test basic flatten
     flatten_fn = FLATTEN(["ids"], delimiter=", ")
-    assert flatten_fn(data) == "123, 456, 789"
+    assert flatten_fn.process(data) == "123, 456, 789"
     
     # Test flatten multiple sources
     flatten_multi = FLATTEN(["ids", "codes"], delimiter=" | ")
-    assert flatten_multi(data) == "123 | 456 | 789 | A | B | C"
+    assert flatten_multi.process(data) == "123 | 456 | 789 | A | B | C"
 
 
 def test_coalesce_seed():
-    """Test COALESCE seed functionality from README."""
+    """Test COALESCE seed functionality from README using new API."""
     data = {
         "primary": None,
         "secondary": "",
@@ -191,35 +208,35 @@ def test_coalesce_seed():
     
     # Test coalesce with first non-empty value
     coalesce_fn = COALESCE(["primary", "secondary", "tertiary"], default="none")
-    assert coalesce_fn(data) == "value3"
+    assert coalesce_fn.process(data) == "value3"
     
     # Test coalesce with all empty, use default
     empty_data = {"primary": None, "secondary": None}
-    assert coalesce_fn(empty_data) == "none"
+    assert coalesce_fn.process(empty_data) == "none"
 
 
 def test_split_seed():
-    """Test SPLIT seed functionality from README."""
+    """Test SPLIT seed functionality from README using new API."""
     data = {
         "full_name": "John James Doe",
         "address": "123 Main St\nNew York, NY 10001"
     }
     
     # Test split first name
-    split_first = SPLIT("full_name", pattern=" ", part=0)
-    assert split_first(data) == "John"
+    split_first = SPLIT("full_name", " ", 0)
+    assert split_first.process(data) == "John"
     
     # Test split last name
-    split_last = SPLIT("full_name", pattern=" ", part=-1)
-    assert split_last(data) == "Doe"
+    split_last = SPLIT("full_name", " ", -1)
+    assert split_last.process(data) == "Doe"
     
     # Test split with transformation
-    split_city = SPLIT("address", pattern="\n", part=1, then=lambda x: x.split(", ")[0] if x else None)
-    assert split_city(data) == "New York"
+    split_city = SPLIT("address", "\n", 1, then=lambda x: x.split(", ")[0] if x else None)
+    assert split_city.process(data) == "New York"
 
 
 def test_complex_nested_transformation():
-    """Test complex nested transformation with multiple seeds."""
+    """Test complex nested transformation with multiple seeds using new API."""
     data = {
         "patient": {
             "names": [
@@ -234,27 +251,44 @@ def test_complex_nested_transformation():
     }
     
     def mapper(data):
-        # Find first non-nickname name
-        names = data.get("patient", {}).get("names", [])
-        primary_name = next((n for n in names if n.get("use") != "nickname"), None)
-        nickname_name = next((n for n in names if n.get("use") == "nickname"), None)
-        
         return {
-            "primary_name": (primary_name.get("given", [""])[0] + " " + primary_name.get("family", "")) if primary_name else "",
-            "nickname": nickname_name.get("given", [""])[0] if nickname_name else "",
-            "contact_info": " | ".join([tc.get("value", "") for tc in data.get("patient", {}).get("telecom", [])])
+            "primary_name": MERGE(
+                "patient.names[0].given[0]", 
+                "patient.names[0].family", 
+                template="{} {}"
+            ).process(data),
+            "nickname": COALESCE([
+                "patient.names[1].given[0]",
+                "patient.names[0].given[1]"
+            ], default="").process(data),
+            "contact_display": CASE("patient.telecom[0].system", {
+                "phone": "📞 " + get(data, "patient.telecom[0].value", ""),
+                "email": "📧 " + get(data, "patient.telecom[0].value", ""),
+                "fax": "📠 " + get(data, "patient.telecom[0].value", "")
+            }, default="📮 " + get(data, "patient.telecom[0].value", "")).process(data),
+            "all_contacts": FLATTEN([
+                "patient.telecom[*].value"
+            ], delimiter=" | ").process(data),
+            "name_count": len(get(data, "patient.names", [])),
+            "has_nickname": CASE("patient.names[1].use", {
+                "nickname": True,
+                lambda x: x is not None: False
+            }, default=False).process(data)
         }
     
     piper = DictPiper(mapper)
-    result = piper.run(data)
+    result = piper(data)
     
     assert result["primary_name"] == "John Doe"
     assert result["nickname"] == "Johnny"
-    assert result["contact_info"] == "555-1234 | john@example.com"
+    assert result["contact_display"] == "📞 555-1234"
+    assert result["all_contacts"] == "555-1234 | john@example.com"
+    assert result["name_count"] == 2
+    assert result["has_nickname"] == True
 
 
 def test_error_handling():
-    """Test error handling in transformations."""
+    """Test error handling in transformations using new API."""
     data = {"name": "John"}
     
     # Test with invalid path
@@ -265,8 +299,16 @@ def test_error_handling():
     
     # Test MERGE with all missing values
     merge_fn = MERGE("missing1", "missing2", template="{} {}")
-    assert merge_fn(data) == "None None"  # Template with None values
+    assert merge_fn.process(data) == "None None"  # Template with None values
     
     # Test SPLIT with missing data
-    split_fn = SPLIT("missing", pattern=" ", part=0)
-    assert split_fn(data) is None
+    split_fn = SPLIT("missing", " ", 0)
+    assert split_fn.process(data) is None
+    
+    # Test COALESCE fallback behavior
+    coalesce_fn = COALESCE(["missing1", "missing2"], default="fallback")
+    assert coalesce_fn.process(data) == "fallback"
+    
+    # Test CASE with missing data
+    case_fn = CASE("missing.field", {"value": "result"}, default="no_match")
+    assert case_fn.process(data) == "no_match"

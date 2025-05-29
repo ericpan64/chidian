@@ -104,6 +104,7 @@ def test_keep() -> None:
         "nested_vals": {"dict": {}, "list": [], "str": "", "none": None, "other_static_val": "Abc"},
         "static_val": "Def",
         "empty_list": [],
+        "removed_empty_list": [],
     }
 
 
