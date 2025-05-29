@@ -3,6 +3,7 @@ A SpecialEnumlikeExtraDefinition (abbrv. SEED) is a series of helpful classes/en
 """
 
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from enum import Enum
 from typing import Any, TypeAlias
@@ -12,7 +13,29 @@ ConditionalCheck: TypeAlias = Callable[[Any], bool]
 MappingFunc: TypeAlias = Callable[..., dict[str, Any]]
 
 
-class DROP(Enum):
+class SEED(ABC):
+    """Base class for all SEED objects.
+    
+    SEEDs are special objects that modify data processing behavior in DictPiper.
+    They can be consumed during mapping execution to perform transformations,
+    conditionals, or structural modifications.
+    """
+    
+    @abstractmethod
+    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
+        """Process the seed with given data and optional context.
+        
+        Args:
+            data: The input data to process
+            context: Optional context containing parent references, indices, etc.
+        
+        Returns:
+            The processed result
+        """
+        pass
+
+
+class DropLevel(Enum):
     """
     A DROP placeholder object indicates the object relative to the current value should be dropped. 
       An "object" in this context is a dict or a list.
@@ -48,38 +71,100 @@ class DROP(Enum):
     GREATGRANDPARENT = -4
 
 
-class KEEP:
+class DROP(SEED):
+    """
+    A DROP placeholder object indicates the object relative to the current value should be dropped.
+    An "object" in this context is a dict or a list.
+    """
+    
+    # Class-level constants for common drop levels
+    THIS_OBJECT = DropLevel.THIS_OBJECT
+    PARENT = DropLevel.PARENT
+    GRANDPARENT = DropLevel.GRANDPARENT
+    GREATGRANDPARENT = DropLevel.GREATGRANDPARENT
+    
+    def __init__(self, level: DropLevel):
+        self.level = level
+    
+    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
+        """DROP seeds are processed by DictPiper, not directly."""
+        return self
+    
+    @classmethod
+    def this_object(cls) -> 'DROP':
+        return cls(DropLevel.THIS_OBJECT)
+    
+    @classmethod
+    def parent(cls) -> 'DROP':
+        return cls(DropLevel.PARENT)
+    
+    @classmethod
+    def grandparent(cls) -> 'DROP':
+        return cls(DropLevel.GRANDPARENT)
+    
+    @classmethod
+    def greatgrandparent(cls) -> 'DROP':
+        return cls(DropLevel.GREATGRANDPARENT)
+
+
+# Create module-level constants for backward compatibility
+DROP.THIS_OBJECT = DROP.this_object()
+DROP.PARENT = DROP.parent()
+DROP.GRANDPARENT = DROP.grandparent()
+DROP.GREATGRANDPARENT = DROP.greatgrandparent()
+
+
+class KEEP(SEED):
     """
     A value wrapped in a KEEP object should be ignored by the Mapper class when removing values.
 
     Partial keeping is _not_ supported (i.e. a KEEP object within an object to be DROP-ed).
     """
 
-    def __init__(self, v: Any):
-        self.value = v
+    def __init__(self, value: Any):
+        self.value = value
+    
+    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
+        """KEEP seeds preserve their value during processing."""
+        return self.value
 
-class ELIF:
+class ELIF(SEED):
     """
     An ELIF object contains a conditional statement and a dictionary which outlines the possible outcomes
     """
-    ...
+    
+    def __init__(self, condition: ConditionalCheck, if_true: Any, if_false: Any = None):
+        self.condition = condition
+        self.if_true = if_true
+        self.if_false = if_false
+    
+    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
+        if self.condition(data):
+            return self.if_true
+        return self.if_false
 
-"Coalesce -- grab first one"
-class COALESCE:
+class COALESCE(SEED):
+    """Coalesce -- grab first non-empty value from multiple paths."""
+    
     def __init__(self, get_func: Callable, paths: list[str], default: Any = None):
         self.get_func = get_func
         self.paths = paths
         self.default = default
     
-    def __call__(self, data: Any) -> Any:
+    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         for path in self.paths:
             value = self.get_func(data, path)
             if value is not None and value != "":
                 return value
         return self.default
+    
+    def __call__(self, data: Any) -> Any:
+        """Allow callable syntax for backward compatibility."""
+        return self.process(data)
 
-"Split -- make more nested"
-class SPLIT:
+class SPLIT(SEED):
+    """Split -- extract part of a string by splitting on a pattern."""
+    
     def __init__(self, get_func: Callable, path: str, pattern: str, part: int, then: Callable[[Any], Any] = None):
         self.get_func = get_func
         self.path = path
@@ -87,7 +172,7 @@ class SPLIT:
         self.part = part
         self.then = then
     
-    def __call__(self, data: Any) -> Any:
+    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         value = self.get_func(data, self.path)
         if value is None:
             return None
@@ -98,16 +183,21 @@ class SPLIT:
         if self.then:
             return self.then(result)
         return result
+    
+    def __call__(self, data: Any) -> Any:
+        """Allow callable syntax for backward compatibility."""
+        return self.process(data)
 
-"Merge -- make less nested, follow merge template"
-class MERGE:
+class MERGE(SEED):
+    """Merge -- combine multiple values using a template."""
+    
     def __init__(self, get_func: Callable, *paths: str, template: str, skip_none: bool = False):
         self.get_func = get_func
         self.paths = paths
         self.template = template
         self.skip_none = skip_none
     
-    def __call__(self, data: Any) -> Any:
+    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         values = []
         for path in self.paths:
             value = self.get_func(data, path)
@@ -139,15 +229,20 @@ class MERGE:
                 return new_template.format(*values)
         
         return self.template.format(*values)
+    
+    def __call__(self, data: Any) -> Any:
+        """Allow callable syntax for backward compatibility."""
+        return self.process(data)
 
-"Flat -- make less nested, flatten everything"
-class FLATTEN:
+class FLATTEN(SEED):
+    """Flatten -- combine multiple values or lists into a single delimited string."""
+    
     def __init__(self, get_func: Callable, paths: list[str], delimiter: str = ", "):
         self.get_func = get_func
         self.paths = paths
         self.delimiter = delimiter
     
-    def __call__(self, data: Any) -> Any:
+    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         all_values = []
         for path in self.paths:
             values = self.get_func(data, path)
@@ -156,7 +251,16 @@ class FLATTEN:
             elif values is not None:
                 all_values.append(str(values))
         return self.delimiter.join(all_values)
+    
+    def __call__(self, data: Any) -> Any:
+        """Allow callable syntax for backward compatibility."""
+        return self.process(data)
 
-"Default value if multiple options available"
-class DEFAULT:
-    ...
+class DEFAULT(SEED):
+    """Default value if multiple options available."""
+    
+    def __init__(self, value: Any):
+        self.value = value
+    
+    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
+        return self.value
