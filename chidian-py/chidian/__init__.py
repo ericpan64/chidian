@@ -4,6 +4,7 @@ from .collection import DataCollection
 from .piper import DictPiper
 from .seeds import DROP, KEEP, CASE, COALESCE, SPLIT, MERGE, FLATTEN
 from .mapper import StringMapper
+from .partials import FunctionChain, ChainableFn
 
 __all__ = [
     "get",
@@ -18,4 +19,6 @@ __all__ = [
     "MERGE",
     "FLATTEN",
     "StringMapper",
+    "FunctionChain",
+    "ChainableFn",
 ]
