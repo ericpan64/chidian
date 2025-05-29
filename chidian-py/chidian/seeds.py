@@ -8,6 +8,8 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any, TypeAlias
 
+from .chidian import get
+
 ApplyFunc: TypeAlias = Callable[[Any], Any]
 ConditionalCheck: TypeAlias = Callable[[Any], bool]
 MappingFunc: TypeAlias = Callable[..., dict[str, Any]]
@@ -146,14 +148,13 @@ class ELIF(SEED):
 class COALESCE(SEED):
     """Coalesce -- grab first non-empty value from multiple paths."""
     
-    def __init__(self, get_func: Callable, paths: list[str], default: Any = None):
-        self.get_func = get_func
+    def __init__(self, paths: list[str], default: Any = None):
         self.paths = paths
         self.default = default
     
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         for path in self.paths:
-            value = self.get_func(data, path)
+            value = get(data, path)
             if value is not None and value != "":
                 return value
         return self.default
@@ -165,15 +166,14 @@ class COALESCE(SEED):
 class SPLIT(SEED):
     """Split -- extract part of a string by splitting on a pattern."""
     
-    def __init__(self, get_func: Callable, path: str, pattern: str, part: int, then: Callable[[Any], Any] = None):
-        self.get_func = get_func
+    def __init__(self, path: str, pattern: str, part: int, then: Callable[[Any], Any] = None):
         self.path = path
         self.pattern = pattern
         self.part = part
         self.then = then
     
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
-        value = self.get_func(data, self.path)
+        value = get(data, self.path)
         if value is None:
             return None
         parts = value.split(self.pattern)
@@ -191,8 +191,7 @@ class SPLIT(SEED):
 class MERGE(SEED):
     """Merge -- combine multiple values using a template."""
     
-    def __init__(self, get_func: Callable, *paths: str, template: str, skip_none: bool = False):
-        self.get_func = get_func
+    def __init__(self, *paths: str, template: str, skip_none: bool = False):
         self.paths = paths
         self.template = template
         self.skip_none = skip_none
@@ -200,7 +199,7 @@ class MERGE(SEED):
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         values = []
         for path in self.paths:
-            value = self.get_func(data, path)
+            value = get(data, path)
             if self.skip_none:
                 if value is not None:
                     values.append(value)
@@ -237,15 +236,14 @@ class MERGE(SEED):
 class FLATTEN(SEED):
     """Flatten -- combine multiple values or lists into a single delimited string."""
     
-    def __init__(self, get_func: Callable, paths: list[str], delimiter: str = ", "):
-        self.get_func = get_func
+    def __init__(self, paths: list[str], delimiter: str = ", "):
         self.paths = paths
         self.delimiter = delimiter
     
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         all_values = []
         for path in self.paths:
-            values = self.get_func(data, path)
+            values = get(data, path)
             if isinstance(values, list):
                 all_values.extend(str(v) for v in values if v is not None)
             elif values is not None:

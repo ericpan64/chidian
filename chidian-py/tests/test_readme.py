@@ -67,18 +67,17 @@ def test_readme_a_to_b_transformation():
     # Create mapper function following README pattern
     def mapper(data):
         return {
-            "full_name": MERGE(get, "name[0].given[0]", "name[0].family", template="{} {}")(data),
+            "full_name": MERGE("name[0].given[0]", "name[0].family", template="{} {}")(data),
             "date_of_birth": get(data, "birthDate"),
             "administrative_gender": get(data, "gender"),
             "old_address": MERGE(
-                get,
                 "address[-1].line[0]",
                 "address[-1].city",
                 "address[-1].postalCode",
                 template="{}\n{}, {}"
             )(data),
-            "all_ids": FLATTEN(get, ["id"], delimiter=", ")(data),
-            "mrn": COALESCE(get, ["id"], default="unknown")(data)  # Simplified - no MR identifier in test data
+            "all_ids": FLATTEN(["id"], delimiter=", ")(data),
+            "mrn": COALESCE(["id"], default="unknown")(data)  # Simplified - no MR identifier in test data
         }
     
     # Execute transformation
@@ -116,7 +115,7 @@ def test_readme_b_to_a_transformation():
             "id": get(data, "mrn"),
             "name": [{
                 "use": "official",
-                "given": [SPLIT(get, "full_name", pattern=" ", part=0)(data)],
+                "given": [SPLIT("full_name", pattern=" ", part=0)(data)],
                 "family": " ".join(get(data, "full_name").split(" ")[1:]) if get(data, "full_name") else ""
             }],
             "gender": get(data, "administrative_gender"),
@@ -154,15 +153,15 @@ def test_merge_seed():
     }
     
     # Test basic merge
-    merge_fn = MERGE(get, "firstName", "lastName", template="{} {}")
+    merge_fn = MERGE("firstName", "lastName", template="{} {}")
     assert merge_fn(data) == "John Doe"
     
     # Test merge with missing values
-    merge_fn_skip = MERGE(get, "firstName", "missing", "lastName", template="{} {} {}", skip_none=True)
+    merge_fn_skip = MERGE("firstName", "missing", "lastName", template="{} {} {}", skip_none=True)
     assert merge_fn_skip(data) == "John Doe"
     
     # Test merge with all values
-    merge_fn_all = MERGE(get, "firstName", "middleName", "lastName", template="{} {} {}")
+    merge_fn_all = MERGE("firstName", "middleName", "lastName", template="{} {} {}")
     assert merge_fn_all(data) == "John James Doe"
 
 
@@ -174,11 +173,11 @@ def test_flatten_seed():
     }
     
     # Test basic flatten
-    flatten_fn = FLATTEN(get, ["ids"], delimiter=", ")
+    flatten_fn = FLATTEN(["ids"], delimiter=", ")
     assert flatten_fn(data) == "123, 456, 789"
     
     # Test flatten multiple sources
-    flatten_multi = FLATTEN(get, ["ids", "codes"], delimiter=" | ")
+    flatten_multi = FLATTEN(["ids", "codes"], delimiter=" | ")
     assert flatten_multi(data) == "123 | 456 | 789 | A | B | C"
 
 
@@ -191,7 +190,7 @@ def test_coalesce_seed():
     }
     
     # Test coalesce with first non-empty value
-    coalesce_fn = COALESCE(get, ["primary", "secondary", "tertiary"], default="none")
+    coalesce_fn = COALESCE(["primary", "secondary", "tertiary"], default="none")
     assert coalesce_fn(data) == "value3"
     
     # Test coalesce with all empty, use default
@@ -207,15 +206,15 @@ def test_split_seed():
     }
     
     # Test split first name
-    split_first = SPLIT(get, "full_name", pattern=" ", part=0)
+    split_first = SPLIT("full_name", pattern=" ", part=0)
     assert split_first(data) == "John"
     
     # Test split last name
-    split_last = SPLIT(get, "full_name", pattern=" ", part=-1)
+    split_last = SPLIT("full_name", pattern=" ", part=-1)
     assert split_last(data) == "Doe"
     
     # Test split with transformation
-    split_city = SPLIT(get, "address", pattern="\n", part=1, then=lambda x: x.split(", ")[0] if x else None)
+    split_city = SPLIT("address", pattern="\n", part=1, then=lambda x: x.split(", ")[0] if x else None)
     assert split_city(data) == "New York"
 
 
@@ -265,9 +264,9 @@ def test_error_handling():
     assert get(data, "name[10]") is None
     
     # Test MERGE with all missing values
-    merge_fn = MERGE(get, "missing1", "missing2", template="{} {}")
+    merge_fn = MERGE("missing1", "missing2", template="{} {}")
     assert merge_fn(data) == "None None"  # Template with None values
     
     # Test SPLIT with missing data
-    split_fn = SPLIT(get, "missing", pattern=" ", part=0)
+    split_fn = SPLIT("missing", pattern=" ", part=0)
     assert split_fn(data) is None
