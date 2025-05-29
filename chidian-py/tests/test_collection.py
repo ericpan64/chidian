@@ -82,17 +82,25 @@ def test_select_method():
     assert names_ages["$1"] == {"name": "Jane", "age": 25}
     assert "patient" not in names_ages["$0"]  # Only selected fields
     
-    # Select nested fields
+    # Select nested fields (now includes None for missing with preserve mode)
     patient_data = collection.select("patient.id, patient.status")
-    assert len(patient_data) == 4  # Alice doesn't have patient field
+    assert len(patient_data) == 5  # All items included, Alice gets None values
     assert patient_data["$0"] == {"id": "p1", "status": "active"}
     assert patient_data["$1"] == {"id": "p2", "status": "inactive"}
+    assert patient_data["$3"] == {"id": None, "status": None}  # Alice has no patient
     
     # Select with wildcard from nested object
     patient_all = collection.select("patient.*")
-    assert len(patient_all) == 4
+    assert len(patient_all) == 5
     assert patient_all["$0"] == {"id": "p1", "status": "active"}
+    assert patient_all["$3"] == {}  # Alice has no patient, gets empty dict
     assert patient_all["$special"] == {"id": "p4", "status": "active"}
+    
+    # Test the old filtering behavior explicitly
+    patient_data_filtered = collection.select("patient.id, patient.status", sparse="filter")
+    assert len(patient_data_filtered) == 4  # Alice filtered out
+    assert patient_data_filtered["$0"] == {"id": "p1", "status": "active"}
+    assert patient_data_filtered["$1"] == {"id": "p2", "status": "inactive"}
     
     # Select with filter
     active_patients = collection.select("name, patient.status", 
@@ -110,6 +118,68 @@ def test_select_method():
                                    where=lambda x: x.get("patient", {}).get("status") == "active",
                                    flat=True)
     assert active_names == ["John", "Bob", "Charlie"]
+
+
+def test_sparse_data_handling():
+    """Test sparse data handling with missing fields."""
+    collection = DataCollection([
+        {"name": "John", "age": 30, "patient": {"id": "p1", "status": "active"}},
+        {"name": "Jane", "age": 25},  # Missing patient field
+        {"name": "Bob", "patient": {"id": "p3"}},  # Missing age and patient.status
+        {"age": 35, "patient": {"status": "active"}},  # Missing name and patient.id
+    ])
+    
+    # Test preserve mode (default) - keeps structure with None for missing values
+    names_ages = collection.select("name, age")
+    assert len(names_ages) == 4
+    assert names_ages["$0"] == {"name": "John", "age": 30}
+    assert names_ages["$1"] == {"name": "Jane", "age": 25}
+    assert names_ages["$2"] == {"name": "Bob", "age": None}  # age is None
+    assert names_ages["$3"] == {"name": None, "age": 35}     # name is None
+    
+    # Test nested field extraction with preserve
+    patient_ids = collection.select("patient.id")
+    assert len(patient_ids) == 4
+    assert patient_ids["$0"] == {"id": "p1"}
+    assert patient_ids["$1"] == {"id": None}  # Jane has no patient
+    assert patient_ids["$2"] == {"id": "p3"}
+    assert patient_ids["$3"] == {"id": None}  # No patient.id
+    
+    # Test filter mode - removes items/fields with None values
+    patient_ids_filtered = collection.select("patient.id", sparse="filter")
+    assert len(patient_ids_filtered) == 2  # Only John and Bob have patient.id
+    assert patient_ids_filtered["$0"] == {"id": "p1"}
+    assert patient_ids_filtered["$1"] == {"id": "p3"}
+    
+    # Test multiple fields with filter (includes items with ANY requested field)
+    partial_data = collection.select("name, patient.id", sparse="filter")
+    assert len(partial_data) == 3  # John (both), Jane (name only), Bob (both)
+    assert partial_data["$0"] == {"name": "John", "id": "p1"}
+    assert partial_data["$1"] == {"name": "Jane"}  # Only has name
+    assert partial_data["$2"] == {"name": "Bob", "id": "p3"}
+    
+    # Test flat mode with preserve (includes None)
+    names_flat = collection.select("name", flat=True)
+    assert names_flat == ["John", "Jane", "Bob", None]
+    
+    # Test flat mode with filter (excludes None)
+    names_flat_filtered = collection.select("name", flat=True, sparse="filter")
+    assert names_flat_filtered == ["John", "Jane", "Bob"]
+    
+    # Test wildcard with sparse handling
+    patient_all = collection.select("patient.*")
+    assert len(patient_all) == 4
+    assert patient_all["$0"] == {"id": "p1", "status": "active"}
+    assert patient_all["$1"] == {}  # Jane has no patient, so empty dict
+    assert patient_all["$2"] == {"id": "p3"}  # Bob has patient but no status
+    assert patient_all["$3"] == {"status": "active"}  # Has status but no id
+    
+    # Test wildcard with filter
+    patient_all_filtered = collection.select("patient.*", sparse="filter")
+    assert len(patient_all_filtered) == 3  # Excludes Jane (no patient field)
+    assert patient_all_filtered["$0"] == {"id": "p1", "status": "active"}
+    assert patient_all_filtered["$1"] == {"id": "p3"}
+    assert patient_all_filtered["$2"] == {"status": "active"}
 
 def test_filter_method():
     """Test the filter method."""

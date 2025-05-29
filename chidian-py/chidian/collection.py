@@ -66,24 +66,28 @@ class DataCollection(dict):
             results.append(value)
         return results
     
-    def select(self, fields: str = "*", where: Optional[Callable[[dict], bool]] = None, flat: bool = False):
+    def select(self, fields: str = "*", where: Optional[Callable[[dict], bool]] = None, flat: bool = False, sparse: str = "preserve"):
         """
-        Select fields from the collection with optional filtering.
+        Select fields from the collection with optional filtering and sparse data handling.
         
         Examples:
-            collection.select("name, age")                    # Select specific fields
+            collection.select("name, age")                    # Select specific fields, None for missing
             collection.select("patient.name, patient.id")     # Nested paths
             collection.select("patient.*")                    # All from nested object
             collection.select("*", where=lambda x: x.get("active") is not None)
             collection.select("name", flat=True)              # Return flat list
+            collection.select("patient.id", sparse="filter")  # Filter out items with None values
             
         Args:
             fields: Field specification ("*", "field1, field2", "nested.*")
             where: Optional filter predicate
             flat: If True and single field, return list instead of DataCollection
+            sparse: How to handle missing values ("preserve", "filter")
+                   - "preserve": Keep items with None values (default for structure preservation)
+                   - "filter": Remove items/fields with None values (default for aggregations)
             
         Returns:
-            DataCollection with same structure but query results, or list if flat=True
+            DataCollection with query results, or list if flat=True
         """
         # Parse field specification
         if fields == "*":
@@ -112,29 +116,46 @@ class DataCollection(dict):
             elif isinstance(field_list, tuple) and field_list[0] == "wildcard":
                 # Handle "nested.*" syntax
                 nested_path = field_list[1]
-                nested_obj = get_rs(item, nested_path, default={})
-                if isinstance(nested_obj, dict) and nested_obj:
-                    result_item = nested_obj.copy()
-                else:
-                    # Skip items with no valid nested object
-                    continue
+                nested_obj = get_rs(item, nested_path, default=None)
+                
+                if sparse == "preserve":
+                    # Always include, even if None or empty
+                    if isinstance(nested_obj, dict):
+                        result_item = nested_obj.copy()
+                    else:
+                        result_item = {} if nested_obj is None else {"value": nested_obj}
+                elif sparse == "filter":
+                    # Only include if non-empty dict
+                    if isinstance(nested_obj, dict) and nested_obj:
+                        result_item = nested_obj.copy()
+                    else:
+                        continue
             elif len(field_list) == 1 and flat:
                 # Single field with flat=True - collect for flat list
                 value = get_rs(item, field_list[0], default=None)
-                result_items.append(value)
+                if sparse == "preserve":
+                    # Include even if None
+                    result_items.append(value)
+                elif sparse == "filter" and value is not None:
+                    # Only include non-None values
+                    result_items.append(value)
                 continue
             else:
                 # Multiple specific fields
                 result_item = {}
                 for field in field_list:
                     value = get_rs(item, field, default=None)
-                    if value is not None:
-                        # Use the field name as key (last part of path)
-                        key_name = field.split(".")[-1] if "." in field else field
+                    key_name = field.split(".")[-1] if "." in field else field
+                    
+                    if sparse == "preserve":
+                        # Always include the field, even if None
+                        result_item[key_name] = value
+                    elif sparse == "filter" and value is not None:
+                        # Only include non-None values
                         result_item[key_name] = value
                 
-                # Skip items with no valid fields (unless we want to preserve empty results)
-                if not result_item:
+                # For "filter" mode, skip items with no valid fields
+                if sparse == "filter" and not result_item:
                     continue
             
             result_items.append(result_item)
