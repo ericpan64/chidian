@@ -23,31 +23,41 @@ def test_basic_collection():
     assert collection["$1"]["name"] == "Jane"
     assert collection["$2"]["name"] == "Bob"
 
-def test_get_method():
-    """Test the get method with various paths."""
+def test_dict_access_and_get_all():
+    """Test built-in dict access and get_all method."""
     collection = DataCollection([
         {"patient": {"id": "123", "name": "John"}, "status": "active"},
         {"patient": {"id": "456", "name": "Jane"}, "status": "inactive"},
         {"patient": {"id": "789", "name": "Bob"}, "status": "active"}
     ])
     
-    # Index-based access with $n syntax
-    assert collection.get("$0")["patient"]["id"] == "123"
-    assert collection.get("$1")["patient"]["id"] == "456"
-    assert collection.get("$2")["patient"]["id"] == "789"
+    # Test built-in dict access (should work as normal dict)
+    assert collection["$0"]["patient"]["id"] == "123"
+    assert collection["$1"]["patient"]["id"] == "456"
+    assert collection["$2"]["patient"]["id"] == "789"
     
-    # Path access with $n syntax
-    assert collection.get("$0.patient.name") == "John"
-    assert collection.get("$1.patient.name") == "Jane"
-    assert collection.get("$2.status") == "active"
+    # Test dict.get() method (inherited)
+    assert collection.get("$0")["patient"]["name"] == "John"
+    assert collection.get("$nonexistent") is None
+    assert collection.get("$nonexistent", "default") == "default"
     
-    # Out of bounds returns default
-    assert collection.get("$10") is None
-    assert collection.get("$10", default="not found") == "not found"
+    # Test get_all method for extracting from all items
+    all_ids = collection.get_all("patient.id")
+    assert all_ids == ["123", "456", "789"]
     
-    # With apply function on single item
-    upper_name = collection.get("$0.patient.name", apply=str.upper)
-    assert upper_name == "JOHN"
+    all_names = collection.get_all("patient.name")
+    assert all_names == ["John", "Jane", "Bob"]
+    
+    all_statuses = collection.get_all("status")
+    assert all_statuses == ["active", "inactive", "active"]
+    
+    # Test get_all with missing paths and defaults
+    missing_field = collection.get_all("missing_field", default="N/A")
+    assert missing_field == ["N/A", "N/A", "N/A"]
+    
+    # Test get_all with apply function
+    upper_names = collection.get_all("patient.name", apply=str.upper)
+    assert upper_names == ["JOHN", "JANE", "BOB"]
 
 def test_select_method():
     """Test the enhanced select method with field selection."""
@@ -181,8 +191,8 @@ def test_append_method():
     assert collection["$2"]["name"] == "Bob"
     assert len(collection) == 3
     
-    # Test accessing named item with get
-    assert collection.get("$jane_key.name") == "Jane"
+    # Test accessing named item with dict access
+    assert collection["$jane_key"]["name"] == "Jane"
 
 def test_complex_nested_access():
     """Test complex nested data access."""
@@ -202,19 +212,19 @@ def test_complex_nested_access():
         }
     ])
     
-    # Access nested array element
-    mrn = collection.get("$0.patient.identifiers[0].value")
-    assert mrn == "MRN123"
+    # Access nested array element using get_all
+    mrn = collection.get_all("patient.identifiers[0].value")
+    assert mrn == ["MRN123"]
     
-    # Access all encounter IDs using direct path
-    encounter_ids = collection.get("$0.encounters[*].id")
-    assert encounter_ids == ["e1", "e2"]
+    # Access all encounter IDs using get_all  
+    encounter_ids = collection.get_all("encounters[*].id")
+    assert encounter_ids == [["e1", "e2"]]
     
-    # Access using new $ syntax
-    first_patient_id = collection.get("$0.patient.id")
+    # Access using dict access
+    first_patient_id = collection["$0"]["patient"]["id"]
     assert first_patient_id == "123"
     
-    # Test complex path with array
-    all_identifiers = collection.get("$0.patient.identifiers")
-    assert len(all_identifiers) == 2
-    assert all_identifiers[0]["system"] == "MRN"
+    # Test complex path with array using get_all
+    all_identifiers = collection.get_all("patient.identifiers")
+    assert len(all_identifiers[0]) == 2
+    assert all_identifiers[0][0]["system"] == "MRN"

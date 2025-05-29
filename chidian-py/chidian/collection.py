@@ -42,52 +42,29 @@ class DataCollection(dict):
                 for key, item in items.items():
                     self[key] = item
     
-    def get(self, key: str, default: Any = None, apply: Optional[Callable] = None, strict: bool = False) -> Any:
+    def get_all(self, path: str, default: Any = None, apply: Optional[Callable] = None, strict: bool = False) -> list:
         """
-        Get a single value using path-based access (for collection-wide queries use select()).
+        Apply get_rs to extract a path from all items in the collection.
         
         Examples:
-            collection.get("$0")                  # Get first item
-            collection.get("$2.patient.id")       # Get nested value from third item
-            collection.get("$my_key.status")      # Get from named item
+            collection.get_all("patient.id")      # Get patient.id from all items
+            collection.get_all("name")             # Get name from all items
+            collection.get_all("status", default="unknown")  # With default
         
         Args:
-            key: Path to retrieve (use $n for index, $key for named items)
-            default: Default if not found
-            apply: Optional transform function
-            strict: Raise errors instead of returning None
-        """
-        # Handle $-based syntax
-        if key.startswith("$"):
-            # Split at first dot to separate the reference from the path
-            parts = key.split(".", 1)
-            ref = parts[0]
-            path = parts[1] if len(parts) > 1 else None
+            path: Path to extract from each item
+            default: Default value for items missing this path
+            apply: Optional transform function to apply to each result
+            strict: If True, raise errors instead of returning default
             
-            # Check if ref is a number (index access)
-            try:
-                index = int(ref[1:])  # Remove $ and convert
-                if 0 <= index < len(self._items):
-                    item = self._items[index]
-                    if path:
-                        return get_rs(item, path, default=default, apply=apply, strict=strict)
-                    else:
-                        return apply(item) if apply else item
-                else:
-                    return default
-            except ValueError:
-                # Not a number, treat as key access
-                if ref in self:
-                    item = self[ref]
-                    if path:
-                        return get_rs(item, path, default=default, apply=apply, strict=strict)
-                    else:
-                        return apply(item) if apply else item
-                else:
-                    return default
-        
-        # For non-$ queries, use get_rs directly on the dict
-        return get_rs(self, key, default=default, apply=apply, strict=strict)
+        Returns:
+            List of extracted values (one per item)
+        """
+        results = []
+        for item in self._items:
+            value = get_rs(item, path, default=default, apply=apply, strict=strict)
+            results.append(value)
+        return results
     
     def select(self, fields: str = "*", where: Optional[Callable[[dict], bool]] = None, flat: bool = False):
         """
