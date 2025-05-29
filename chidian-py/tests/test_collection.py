@@ -18,9 +18,10 @@ def test_basic_collection():
     # Test iteration
     assert list(collection) == items
     
-    # Test dict-like access
-    assert collection["0"]["name"] == "John"
-    assert collection["1"]["name"] == "Jane"
+    # Test dict-like access with new $ syntax
+    assert collection["$0"]["name"] == "John"
+    assert collection["$1"]["name"] == "Jane"
+    assert collection["$2"]["name"] == "Bob"
 
 def test_get_method():
     """Test the get method with various paths."""
@@ -30,20 +31,22 @@ def test_get_method():
         {"patient": {"id": "789", "name": "Bob"}, "status": "active"}
     ])
     
-    # Direct access
-    assert collection.get("0")["patient"]["id"] == "123"
+    # Index-based access with $n syntax
+    assert collection.get("$0")["patient"]["id"] == "123"
+    assert collection.get("$1")["patient"]["id"] == "456"
+    assert collection.get("$2")["patient"]["id"] == "789"
     
-    # Path access
-    assert collection.get("0.patient.name") == "John"
+    # Path access with $n syntax
+    assert collection.get("$0.patient.name") == "John"
+    assert collection.get("$1.patient.name") == "Jane"
+    assert collection.get("$2.status") == "active"
     
-    # $0 syntax to access items list
-    assert len(collection.get("$0")) == 3
-    assert collection.get("$0[0].patient.name") == "John"
-    assert collection.get("$0[1].patient.id") == "456"
-    assert collection.get("$0[:2]")[0]["patient"]["name"] == "John"
+    # Out of bounds returns default
+    assert collection.get("$10") is None
+    assert collection.get("$10", default="not found") == "not found"
     
     # With apply function on single item
-    upper_name = collection.get("0.patient.name", apply=str.upper)
+    upper_name = collection.get("$0.patient.name", apply=str.upper)
     assert upper_name == "JOHN"
 
 def test_select_method():
@@ -80,15 +83,29 @@ def test_filter_method():
         {"name": "Jane", "age": 25, "active": False},
         {"name": "Bob", "age": 35, "active": True}
     ])
+    collection.append({"name": "Alice", "age": 28, "active": True}, key="alice")
     
     # Filter by active status
     active_collection = collection.filter(lambda x: x.get("active", False))
-    assert len(active_collection) == 2
+    assert len(active_collection) == 3
+    
+    # Check that numeric keys are reindexed
+    assert "$0" in active_collection
+    assert "$1" in active_collection
+    assert "$2" in active_collection
+    assert active_collection["$0"]["name"] == "John"
+    assert active_collection["$1"]["name"] == "Bob"
+    assert active_collection["$2"]["name"] == "Alice"
+    
+    # Check that custom key is preserved
+    assert "$alice" in active_collection
+    assert active_collection["$alice"]["name"] == "Alice"
     
     # Filter by age
     young_collection = collection.filter(lambda x: x.get("age", 0) < 30)
-    assert len(young_collection) == 1
+    assert len(young_collection) == 2
     assert list(young_collection)[0]["name"] == "Jane"
+    assert list(young_collection)[1]["name"] == "Alice"
 
 def test_map_method():
     """Test the map method."""
@@ -112,27 +129,35 @@ def test_to_json():
     
     # As dict
     json_str = collection.to_json()
-    assert '"0":' in json_str
-    assert '"1":' in json_str
+    assert '"$0":' in json_str
+    assert '"$1":' in json_str
     
     # As list
     json_list = collection.to_json(as_list=True)
     assert json_list.startswith('[')
     assert json_list.endswith(']')
 
-def test_add_method():
-    """Test adding items to collection."""
+def test_append_method():
+    """Test appending items to collection."""
     collection = DataCollection()
     
-    # Add with auto-generated key
-    collection.add({"name": "John"})
+    # Append with auto-generated key
+    collection.append({"name": "John"})
     assert len(collection) == 1
-    assert collection["0"]["name"] == "John"
+    assert collection["$0"]["name"] == "John"
     
-    # Add with specific key
-    collection.add({"name": "Jane"}, key="jane_key")
-    assert collection["jane_key"]["name"] == "Jane"
+    # Append with specific key (should get $ prefix)
+    collection.append({"name": "Jane"}, key="jane_key")
+    assert collection["$jane_key"]["name"] == "Jane"
     assert len(collection) == 2
+    
+    # Append another auto-keyed item
+    collection.append({"name": "Bob"})
+    assert collection["$2"]["name"] == "Bob"
+    assert len(collection) == 3
+    
+    # Test accessing named item with get
+    assert collection.get("$jane_key.name") == "Jane"
 
 def test_complex_nested_access():
     """Test complex nested data access."""
@@ -153,13 +178,18 @@ def test_complex_nested_access():
     ])
     
     # Access nested array element
-    mrn = collection.get("0.patient.identifiers[0].value")
+    mrn = collection.get("$0.patient.identifiers[0].value")
     assert mrn == "MRN123"
     
     # Access all encounter IDs using direct path
-    encounter_ids = collection.get("0.encounters[*].id")
+    encounter_ids = collection.get("$0.encounters[*].id")
     assert encounter_ids == ["e1", "e2"]
     
-    # Access using $0 syntax
-    first_patient_id = collection.get("$0[0].patient.id")
+    # Access using new $ syntax
+    first_patient_id = collection.get("$0.patient.id")
     assert first_patient_id == "123"
+    
+    # Test complex path with array
+    all_identifiers = collection.get("$0.patient.identifiers")
+    assert len(all_identifiers) == 2
+    assert all_identifiers[0]["system"] == "MRN"

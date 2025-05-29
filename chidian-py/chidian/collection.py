@@ -33,9 +33,9 @@ class DataCollection(dict):
         if items is not None:
             if isinstance(items, list):
                 self._items = items
-                # Store items by index in parent dict
+                # Store items by index using $-syntax
                 for i, item in enumerate(items):
-                    self[str(i)] = item
+                    self[f"${i}"] = item
             elif isinstance(items, dict):
                 self._items = list(items.values())
                 # Store items by their original keys
@@ -47,27 +47,46 @@ class DataCollection(dict):
         Get a single value using path-based access (for collection-wide queries use select()).
         
         Examples:
-            collection.get("patient_123")         # Get specific item
-            collection.get("0.patient.id")        # Get nested value
-            collection.get("$0")                  # Get all items as list
-            collection.get("$0[2].status")        # Get from third item
+            collection.get("$0")                  # Get first item
+            collection.get("$2.patient.id")       # Get nested value from third item
+            collection.get("$my_key.status")      # Get from named item
         
         Args:
-            key: Path to retrieve ($0 references the ordered items list)
+            key: Path to retrieve (use $n for index, $key for named items)
             default: Default if not found
             apply: Optional transform function
             strict: Raise errors instead of returning None
         """
-        # Handle special $0 syntax for accessing the ordered items
-        if key == "$0":
-            result = self._items
-            return apply(result) if apply else result
-        elif key.startswith("$0[") or key.startswith("$0."):
-            # Replace $0 with the items list for get_rs to process
-            modified_key = key[2:]  # Remove "$0"
-            return get_rs(self._items, modified_key, default=default, apply=apply, strict=strict)
+        # Handle $-based syntax
+        if key.startswith("$"):
+            # Split at first dot to separate the reference from the path
+            parts = key.split(".", 1)
+            ref = parts[0]
+            path = parts[1] if len(parts) > 1 else None
+            
+            # Check if ref is a number (index access)
+            try:
+                index = int(ref[1:])  # Remove $ and convert
+                if 0 <= index < len(self._items):
+                    item = self._items[index]
+                    if path:
+                        return get_rs(item, path, default=default, apply=apply, strict=strict)
+                    else:
+                        return apply(item) if apply else item
+                else:
+                    return default
+            except ValueError:
+                # Not a number, treat as key access
+                if ref in self:
+                    item = self[ref]
+                    if path:
+                        return get_rs(item, path, default=default, apply=apply, strict=strict)
+                    else:
+                        return apply(item) if apply else item
+                else:
+                    return default
         
-        # For all other queries, use get_rs directly on the dict
+        # For non-$ queries, use get_rs directly on the dict
         return get_rs(self, key, default=default, apply=apply, strict=strict)
     
     def select(self, key: str = None, where: Optional[Callable[[dict], bool]] = None) -> "DataCollection":
@@ -121,19 +140,23 @@ class DataCollection(dict):
             # Return as dict with current keys
             return json.dumps(dict(self), indent=indent, default=str)
     
-    def add(self, item: dict[str, Any], key: Optional[str] = None) -> None:
+    def append(self, item: dict[str, Any], key: Optional[str] = None) -> None:
         """
-        Add an item to the collection.
+        Append an item to the collection (list-like behavior).
         
         Args:
             item: Dictionary to add
-            key: Optional key (auto-generated from index if not provided)
+            key: Optional key for named access (defaults to $n where n is index)
         """
         self._items.append(item)
         
         if key is None:
-            # Use index as key if not provided
-            key = str(len(self) - 1)
+            # Use $-prefixed index as key
+            key = f"${len(self._items) - 1}"
+        else:
+            # Ensure custom keys start with $
+            if not key.startswith("$"):
+                key = f"${key}"
         
         self[key] = item
     
@@ -149,13 +172,20 @@ class DataCollection(dict):
         """
         filtered_items = [item for item in self._items if predicate(item)]
         
-        # Preserve keys for filtered items
+        # Create new collection with filtered items
         result = DataCollection()
-        for key, value in self.items():
-            if value in filtered_items:
-                result[key] = value
-                
         result._items = filtered_items
+        
+        # First pass: add all items with numeric keys
+        for i, item in enumerate(filtered_items):
+            result[f"${i}"] = item
+        
+        # Second pass: preserve custom keys
+        for key, value in self.items():
+            if value in filtered_items and not (key.startswith("$") and key[1:].isdigit()):
+                # This is a custom key, preserve it
+                result[key] = value
+        
         return result
     
     def map(self, transform: Callable[[dict], dict]) -> "DataCollection":
@@ -170,12 +200,24 @@ class DataCollection(dict):
         """
         transformed = [transform(item) for item in self._items]
         
-        # Create new collection with same structure
-        if isinstance(self.keys(), dict):
-            items_dict = {k: transformed[i] for i, k in enumerate(self.keys())}
-            return DataCollection(items_dict)
-        else:
-            return DataCollection(transformed)
+        # Create new collection
+        result = DataCollection()
+        result._items = transformed
+        
+        # Map old items to their indices for lookup
+        item_to_index = {id(item): i for i, item in enumerate(self._items)}
+        
+        # First pass: add all items with numeric keys
+        for i, item in enumerate(transformed):
+            result[f"${i}"] = item
+        
+        # Second pass: preserve custom keys
+        for key, value in self.items():
+            if id(value) in item_to_index and not (key.startswith("$") and key[1:].isdigit()):
+                # This is a custom key, preserve it with the transformed item
+                result[key] = transformed[item_to_index[id(value)]]
+        
+        return result
     
     def __iter__(self) -> Iterator[dict[str, Any]]:
         """Iterate over items in the collection."""
