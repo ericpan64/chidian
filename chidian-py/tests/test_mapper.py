@@ -155,3 +155,406 @@ def test_dict_interface():
     
     # Update parent dict
     assert dict(mapper) == {'a': '1', 'b': '2'}
+
+
+# StructMapper Tests
+def test_struct_mapper_basic():
+    """Test basic StructMapper functionality with Pydantic models."""
+    from chidian.mapper import StructMapper
+    from pydantic import BaseModel
+    from typing import Optional
+    
+    class SourceModel(BaseModel):
+        subject: dict
+        effectiveDateTime: str
+        valueQuantity: Optional[dict] = None
+    
+    class TargetModel(BaseModel):
+        patient_id: str
+        date: str
+        value: Optional[int] = None
+    
+    mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={
+            'patient_id': 'subject.reference',
+            'date': 'effectiveDateTime',
+            'value': 'valueQuantity.value'
+        }
+    )
+    
+    source = SourceModel(
+        subject={'reference': 'Patient/123'},
+        effectiveDateTime='2024-01-01',
+        valueQuantity={'value': 140, 'unit': 'mmHg'}
+    )
+    
+    result = mapper.forward(source)
+    assert isinstance(result, TargetModel)
+    assert result.patient_id == 'Patient/123'
+    assert result.date == '2024-01-01'
+    assert result.value == 140
+
+
+def test_struct_mapper_with_chains():
+    """Test StructMapper with chainable functions."""
+    from chidian.mapper import StructMapper
+    import chidian.partials as p
+    from pydantic import BaseModel
+    from typing import Optional
+    
+    class SourceModel(BaseModel):
+        effectiveDateTime: str
+        subject: dict
+        code: dict
+        valueQuantity: Optional[dict] = None
+    
+    class TargetModel(BaseModel):
+        date: str
+        patient_id: int
+        normalized_code: str
+        value: float
+    
+    mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={
+            # Simple path
+            'date': 'effectiveDateTime',
+            
+            # With transformation chain
+            'patient_id': p.get('subject.reference') >> p.split('/') >> p.last >> p.to_int,
+            
+            # Multiple transforms
+            'normalized_code': p.get('code.text') >> p.upper >> p.replace(' ', '_'),
+            
+            # With default handling
+            'value': p.get('valueQuantity.value') >> p.default_to(0) >> p.to_float
+        }
+    )
+    
+    source = SourceModel(
+        effectiveDateTime='2024-01-01',
+        subject={'reference': 'Patient/456'},
+        code={'text': 'blood pressure'},
+        valueQuantity={'value': None}
+    )
+    
+    result = mapper.forward(source)
+    assert isinstance(result, TargetModel)
+    assert result.date == '2024-01-01'
+    assert result.patient_id == 456
+    assert result.normalized_code == 'BLOOD_PRESSURE'
+    assert result.value == 0.0
+
+
+def test_struct_mapper_validation():
+    """Test StructMapper validation with required models."""
+    from chidian.mapper import StructMapper
+    from pydantic import BaseModel
+    
+    class SourceModel(BaseModel):
+        id: str
+        name: str
+    
+    class TargetModel(BaseModel):
+        person_id: str
+        display_name: str
+        required_field: str  # This is required but not mapped
+    
+    # Should raise error for missing required field in strict mode
+    with pytest.raises(ValueError, match="Missing required target fields"):
+        StructMapper(
+            source_model=SourceModel,
+            target_model=TargetModel,
+            mapping={
+                'person_id': 'id',
+                'display_name': 'name'
+                # missing required_field
+            },
+            strict=True
+        )
+    
+    # Should work in non-strict mode
+    mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={
+            'person_id': 'id',
+            'display_name': 'name'
+        },
+        strict=False
+    )
+    
+    # Validation should show the issues
+    issues = mapper.validate_mapping()
+    assert 'required_field' in issues['missing_required_fields']
+
+
+def test_struct_mapper_type_validation():
+    """Test StructMapper type validation."""
+    from chidian.mapper import StructMapper
+    from pydantic import BaseModel
+    
+    class SourceModel(BaseModel):
+        id: str
+        name: str
+    
+    class TargetModel(BaseModel):
+        person_id: str
+        display_name: str
+    
+    # Should reject non-Pydantic classes
+    with pytest.raises(TypeError, match="must be a Pydantic BaseModel"):
+        StructMapper(
+            source_model=dict,  # Not a Pydantic model
+            target_model=TargetModel,
+            mapping={'person_id': 'id'}
+        )
+    
+    mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={'person_id': 'id', 'display_name': 'name'}
+    )
+    
+    # Should validate input type in strict mode
+    with pytest.raises(TypeError, match="Expected SourceModel"):
+        mapper.forward({'id': '123', 'name': 'test'})  # Dict instead of model
+
+
+def test_struct_mapper_with_conditionals():
+    """Test StructMapper with conditional mappings."""
+    from chidian.mapper import StructMapper
+    from pydantic import BaseModel
+    from typing import Optional
+    
+    class SourceModel(BaseModel):
+        status: str
+        valueQuantity: Optional[dict] = None
+        valueInteger: Optional[int] = None
+    
+    class TargetModel(BaseModel):
+        status: str
+        value: Optional[float] = None
+    
+    # Legacy dict-based conditionals
+    mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={
+            'status': {
+                'source': 'status',
+                'transform': lambda s: s.upper()
+            },
+            'value': {
+                'source': 'valueQuantity.value',
+                'condition': lambda x: 'valueQuantity' in x and x['valueQuantity'] is not None,
+                'transform': lambda v: float(v) if v else 0.0
+            }
+        }
+    )
+    
+    # With valueQuantity
+    source1 = SourceModel(
+        status='active',
+        valueQuantity={'value': 140}
+    )
+    result1 = mapper.forward(source1)
+    assert result1.status == 'ACTIVE'
+    assert result1.value == 140.0
+    
+    # Without valueQuantity
+    source2 = SourceModel(
+        status='inactive',
+        valueInteger=100
+    )
+    result2 = mapper.forward(source2)
+    assert result2.status == 'INACTIVE'
+    assert result2.value is None  # Condition failed
+
+
+def test_struct_mapper_with_pydantic():
+    """Test StructMapper with Pydantic models."""
+    from chidian.mapper import StructMapper
+    import chidian.partials as p
+    from pydantic import BaseModel
+    from typing import Optional
+    
+    class SourceModel(BaseModel):
+        id: str
+        name: str
+        age: Optional[int] = None
+        active: bool = True
+    
+    class TargetModel(BaseModel):
+        person_id: str
+        display_name: str
+        age_group: str
+        status: str
+    
+    mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={
+            'person_id': 'id',
+            'display_name': p.get('name') >> p.upper,
+            'age_group': p.get('age') >> p.ChainableFn(
+                lambda age: 'adult' if age and age >= 18 else 'minor'
+            ),
+            'status': p.get('active') >> p.ChainableFn(
+                lambda active: 'ACTIVE' if active else 'INACTIVE'
+            )
+        }
+    )
+    
+    source = SourceModel(id='123', name='John Doe', age=25, active=True)
+    result = mapper.forward(source)
+    
+    assert isinstance(result, TargetModel)
+    assert result.person_id == '123'
+    assert result.display_name == 'JOHN DOE'
+    assert result.age_group == 'adult'
+    assert result.status == 'ACTIVE'
+
+
+def test_struct_mapper_with_string_mapper():
+    """Test combining StructMapper with StringMapper."""
+    from chidian.mapper import StructMapper, StringMapper
+    import chidian.partials as p
+    from pydantic import BaseModel
+    
+    class SourceModel(BaseModel):
+        id: str
+        gender: str
+        name: list[dict]
+    
+    class TargetModel(BaseModel):
+        patient_id: str
+        gender_code: str
+        name: str
+    
+    # Code system mapper
+    gender_mapper = StringMapper({
+        'male': 'M',
+        'female': 'F',
+        'other': 'O'
+    })
+    
+    struct_mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={
+            'patient_id': 'id',
+            'gender_code': p.get('gender') >> p.ChainableFn(gender_mapper.forward),
+            'name': p.get('name[0].text')
+        }
+    )
+    
+    source = SourceModel(
+        id='123',
+        gender='female',
+        name=[{'text': 'Jane Doe'}]
+    )
+    
+    result = struct_mapper.forward(source)
+    assert result.patient_id == '123'
+    assert result.gender_code == 'F'
+    assert result.name == 'Jane Doe'
+
+
+def test_struct_mapper_error_handling():
+    """Test StructMapper error handling."""
+    from chidian.mapper import StructMapper
+    import chidian.partials as p
+    from pydantic import BaseModel
+    from typing import Optional
+    
+    class SourceModel(BaseModel):
+        data: dict
+    
+    class TargetModel(BaseModel):
+        valid: Optional[int] = None
+        invalid: Optional[int] = None
+        error: Optional[int] = None
+    
+    # Non-strict mode
+    mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={
+            'valid': 'data.value',
+            'invalid': p.get('missing.path') >> p.to_int,
+            'error': p.ChainableFn(lambda x: 1 / 0)  # Will raise
+        },
+        strict=False
+    )
+    
+    source = SourceModel(data={'value': 123})
+    result = mapper.forward(source)
+    
+    # Should include valid mapping
+    assert result.valid == 123
+    # Should skip invalid mappings (set to None in non-strict)
+    assert result.invalid is None
+    assert result.error is None
+    
+    # Strict mode
+    strict_mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={'error': p.ChainableFn(lambda x: 1 / 0)},
+        strict=True
+    )
+    
+    with pytest.raises(ValueError, match="Error mapping field 'error'"):
+        strict_mapper.forward(source)
+
+
+def test_struct_mapper_nested_mappings():
+    """Test nested structure mappings."""
+    from chidian.mapper import StructMapper
+    import chidian.partials as p
+    from pydantic import BaseModel
+    from typing import Any
+    
+    class SourceModel(BaseModel):
+        subject: dict
+        code: dict
+    
+    class TargetModel(BaseModel):
+        patient: dict
+        codes: list[str]
+    
+    mapper = StructMapper(
+        source_model=SourceModel,
+        target_model=TargetModel,
+        mapping={
+            'patient': {
+                'id': p.get('subject.reference') >> p.extract_id(),
+                'display': p.get('subject.display')
+            },
+            'codes': p.get('code.coding') >> p.ChainableFn(
+                lambda codings: [c.get('code') for c in codings] if codings else []
+            )
+        }
+    )
+    
+    source = SourceModel(
+        subject={
+            'reference': 'Patient/789',
+            'display': 'John Doe'
+        },
+        code={
+            'coding': [
+                {'system': 'LOINC', 'code': '8480-6'},
+                {'system': 'SNOMED', 'code': '271649006'}
+            ]
+        }
+    )
+    
+    result = mapper.forward(source)
+    assert result.patient['id'] == '789'
+    assert result.patient['display'] == 'John Doe'
+    assert result.codes == ['8480-6', '271649006']
