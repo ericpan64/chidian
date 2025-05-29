@@ -89,42 +89,109 @@ class DataCollection(dict):
         # For non-$ queries, use get_rs directly on the dict
         return get_rs(self, key, default=default, apply=apply, strict=strict)
     
-    def select(self, key: str = None, where: Optional[Callable[[dict], bool]] = None) -> "DataCollection":
+    def select(self, fields: str = "*", where: Optional[Callable[[dict], bool]] = None, flat: bool = False):
         """
-        Query across all items in the collection.
+        Select fields from the collection with optional filtering.
         
         Examples:
-            collection.select()                   # All items
-            collection.select("patient")          # Extract patient from each item
-            collection.select("data.status")      # Extract nested values
-            collection.select(where=lambda x: x.get("active"))  # Filter items
+            collection.select("name, age")                    # Select specific fields
+            collection.select("patient.name, patient.id")     # Nested paths
+            collection.select("patient.*")                    # All from nested object
+            collection.select("*", where=lambda x: x.get("active") is not None)
+            collection.select("name", flat=True)              # Return flat list
             
         Args:
-            key: Optional path to extract from each item
+            fields: Field specification ("*", "field1, field2", "nested.*")
             where: Optional filter predicate
+            flat: If True and single field, return list instead of DataCollection
             
         Returns:
-            New DataCollection with results
+            DataCollection with same structure but query results, or list if flat=True
         """
-        selected_items = []
+        # Parse field specification
+        if fields == "*":
+            field_list = None  # Keep all fields
+        elif ".*" in fields:
+            # Handle nested wildcard (e.g., "patient.*")
+            nested_path = fields.replace(".*", "")
+            field_list = ("wildcard", nested_path)
+        else:
+            # Parse comma-separated fields
+            field_list = [f.strip() for f in fields.split(",")]
         
-        for item in self._items:
+        # Process each item
+        result_items = []
+        result_keys = []
+        
+        for i, item in enumerate(self._items):
             # Apply filter if provided
             if where is not None and not where(item):
                 continue
                 
-            if key:
-                # Extract the specified path from each item
-                value = get_rs(item, key, default=None)
-                if value is not None:
-                    # Only include dict values in the new collection
-                    if isinstance(value, dict):
-                        selected_items.append(value)
+            # Extract fields based on specification
+            if field_list is None:
+                # Keep all fields (*)
+                result_item = item.copy()
+            elif isinstance(field_list, tuple) and field_list[0] == "wildcard":
+                # Handle "nested.*" syntax
+                nested_path = field_list[1]
+                nested_obj = get_rs(item, nested_path, default={})
+                if isinstance(nested_obj, dict) and nested_obj:
+                    result_item = nested_obj.copy()
+                else:
+                    # Skip items with no valid nested object
+                    continue
+            elif len(field_list) == 1 and flat:
+                # Single field with flat=True - collect for flat list
+                value = get_rs(item, field_list[0], default=None)
+                result_items.append(value)
+                continue
             else:
-                # No path specified, include the whole item
-                selected_items.append(item)
+                # Multiple specific fields
+                result_item = {}
+                for field in field_list:
+                    value = get_rs(item, field, default=None)
+                    if value is not None:
+                        # Use the field name as key (last part of path)
+                        key_name = field.split(".")[-1] if "." in field else field
+                        result_item[key_name] = value
+                
+                # Skip items with no valid fields (unless we want to preserve empty results)
+                if not result_item:
+                    continue
+            
+            result_items.append(result_item)
+            
+            # Preserve the original key for this item
+            original_key = None
+            for key, val in self.items():
+                if val is item:
+                    original_key = key
+                    break
+            result_keys.append(original_key)
         
-        return DataCollection(selected_items)
+        # Return based on flat parameter
+        if flat and isinstance(field_list, list) and len(field_list) == 1:
+            return result_items
+        
+        # Create new DataCollection preserving structure
+        result = DataCollection()
+        result._items = result_items
+        
+        # Preserve original keys
+        for i, (item, key) in enumerate(zip(result_items, result_keys)):
+            if key is not None:
+                if key.startswith("$") and key[1:].isdigit():
+                    # Reindex numeric keys based on new position
+                    result[f"${i}"] = item
+                else:
+                    # Preserve custom keys
+                    result[key] = item
+            else:
+                # Fallback to numeric key
+                result[f"${i}"] = item
+        
+        return result
 
     def to_json(self, as_list: bool = False, indent: Optional[int] = None) -> str:
         """

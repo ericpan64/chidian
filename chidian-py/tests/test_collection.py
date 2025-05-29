@@ -50,31 +50,56 @@ def test_get_method():
     assert upper_name == "JOHN"
 
 def test_select_method():
-    """Test the select method."""
+    """Test the enhanced select method with field selection."""
     collection = DataCollection([
-        {"type": "patient", "data": {"id": "p1", "status": "active"}},
-        {"type": "patient", "data": {"id": "p2", "status": "inactive"}},
-        {"type": "encounter", "data": {"id": "e1", "patient": "p1"}},
-        {"type": "patient", "data": {"id": "p3", "status": "active"}}
+        {"name": "John", "age": 30, "patient": {"id": "p1", "status": "active"}},
+        {"name": "Jane", "age": 25, "patient": {"id": "p2", "status": "inactive"}},
+        {"name": "Bob", "age": 35, "patient": {"id": "p3", "status": "active"}},
+        {"name": "Alice", "age": 28, "encounter": {"id": "e1", "patient": "p1"}}
     ])
+    collection.append({"name": "Charlie", "age": 40, "patient": {"id": "p4", "status": "active"}}, key="special")
     
-    # Select all items
-    all_items = collection.select()
-    assert len(all_items) == 4
+    # Select all items (*)
+    all_items = collection.select("*")
+    assert len(all_items) == 5
+    assert all_items["$0"]["name"] == "John"
+    assert all_items["$special"]["name"] == "Charlie"  # Preserves custom key
     
-    # Select data field from all items
-    all_data = collection.select("data")
-    assert len(all_data) == 4
-    assert all("id" in item for item in all_data)
+    # Select specific fields
+    names_ages = collection.select("name, age")
+    assert len(names_ages) == 5
+    assert names_ages["$0"] == {"name": "John", "age": 30}
+    assert names_ages["$1"] == {"name": "Jane", "age": 25}
+    assert "patient" not in names_ages["$0"]  # Only selected fields
+    
+    # Select nested fields
+    patient_data = collection.select("patient.id, patient.status")
+    assert len(patient_data) == 4  # Alice doesn't have patient field
+    assert patient_data["$0"] == {"id": "p1", "status": "active"}
+    assert patient_data["$1"] == {"id": "p2", "status": "inactive"}
+    
+    # Select with wildcard from nested object
+    patient_all = collection.select("patient.*")
+    assert len(patient_all) == 4
+    assert patient_all["$0"] == {"id": "p1", "status": "active"}
+    assert patient_all["$special"] == {"id": "p4", "status": "active"}
     
     # Select with filter
-    patients_only = collection.select(where=lambda x: x.get("type") == "patient")
-    assert len(patients_only) == 3
+    active_patients = collection.select("name, patient.status", 
+                                      where=lambda x: x.get("patient", {}).get("status") == "active")
+    assert len(active_patients) == 3
+    assert active_patients["$0"] == {"name": "John", "status": "active"}
+    assert active_patients["$special"] == {"name": "Charlie", "status": "active"}
     
-    # Select data field with filter
-    active_data = collection.select("data", where=lambda x: x.get("data", {}).get("status") == "active")
-    assert len(active_data) == 2
-    assert all(item.get("status") == "active" for item in active_data)
+    # Flat return for single field
+    names_flat = collection.select("name", flat=True)
+    assert names_flat == ["John", "Jane", "Bob", "Alice", "Charlie"]
+    
+    # Flat with filter
+    active_names = collection.select("name", 
+                                   where=lambda x: x.get("patient", {}).get("status") == "active",
+                                   flat=True)
+    assert active_names == ["John", "Bob", "Charlie"]
 
 def test_filter_method():
     """Test the filter method."""

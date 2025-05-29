@@ -9,7 +9,6 @@ __all__ = [
     "put", 
     "DataCollection",
     "DictPiper",
-    "Piper",
     "DROP",
     "KEEP",
     "CASE",
