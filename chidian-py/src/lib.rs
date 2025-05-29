@@ -17,17 +17,18 @@ fn get(
     strict: Option<bool>,
 ) -> PyResult<PyObject> {
     let strict = strict.unwrap_or(false);
-    
+
     // Parse the path
     let path = match parse_path(key) {
         Ok((remaining, path)) if remaining.is_empty() => path,
         _ => {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("Invalid path syntax: {}", key)
-            ));
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "Invalid path syntax: {}",
+                key
+            )));
         }
     };
-    
+
     // Traverse the path (always use flatten=false since it's removed)
     let result = if strict {
         match traverse_path_strict(py, source, &path, false) {
@@ -37,7 +38,7 @@ fn get(
     } else {
         traverse_path(py, source, &path, false)?
     };
-    
+
     // Handle default value first
     let mut final_result = result;
     if final_result.bind(py).is_none() {
@@ -45,12 +46,12 @@ fn get(
             final_result = default_val.to_object(py);
         }
     }
-    
+
     // Apply functions if provided (to the final result, including defaults)
     if let Some(functions) = apply {
         final_result = apply_functions(py, final_result, functions)?;
     }
-    
+
     Ok(final_result)
 }
 

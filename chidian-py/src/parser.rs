@@ -30,34 +30,29 @@ fn is_identifier_char(c: char) -> bool {
 
 // Parse a key name (alphanumeric + underscore + hyphen)
 fn parse_key(input: &str) -> IResult<&str, PathSegment> {
-    map(
-        take_while1(is_identifier_char),
-        |s: &str| PathSegment::Key(s.to_string())
-    )(input)
+    map(take_while1(is_identifier_char), |s: &str| {
+        PathSegment::Key(s.to_string())
+    })(input)
 }
 
 // Parse a signed integer
 fn parse_integer(input: &str) -> IResult<&str, i32> {
-    map(
-        recognize(tuple((opt(char('-')), digit1))),
-        |s: &str| i32::from_str(s).unwrap()
-    )(input)
+    map(recognize(tuple((opt(char('-')), digit1))), |s: &str| {
+        i32::from_str(s).unwrap()
+    })(input)
 }
 
 // Parse array index like [0] or [-1]
 fn parse_index(input: &str) -> IResult<&str, PathSegment> {
     map(
         delimited(char('['), parse_integer, char(']')),
-        PathSegment::Index
+        PathSegment::Index,
     )(input)
 }
 
 // Parse wildcard [*]
 fn parse_wildcard(input: &str) -> IResult<&str, PathSegment> {
-    map(
-        tag("[*]"),
-        |_| PathSegment::Wildcard
-    )(input)
+    map(tag("[*]"), |_| PathSegment::Wildcard)(input)
 }
 
 // Parse slice like [1:3] or [:3] or [1:]
@@ -65,14 +60,10 @@ fn parse_slice(input: &str) -> IResult<&str, PathSegment> {
     delimited(
         char('['),
         map(
-            tuple((
-                opt(parse_integer),
-                char(':'),
-                opt(parse_integer)
-            )),
-            |(start, _, end)| PathSegment::Slice(start, end)
+            tuple((opt(parse_integer), char(':'), opt(parse_integer))),
+            |(start, _, end)| PathSegment::Slice(start, end),
         ),
-        char(']')
+        char(']'),
     )(input)
 }
 
@@ -86,18 +77,20 @@ fn ws(input: &str) -> IResult<&str, &str> {
 fn parse_key_with_brackets(input: &str) -> IResult<&str, Vec<PathSegment>> {
     let (input, key) = parse_key(input)?;
     let mut segments = vec![key];
-    
+
     // Parse any following brackets
     let mut remaining = input;
     loop {
-        if let Ok((new_remaining, bracket)) = alt((parse_wildcard, parse_slice, parse_index))(remaining) {
+        if let Ok((new_remaining, bracket)) =
+            alt((parse_wildcard, parse_slice, parse_index))(remaining)
+        {
             segments.push(bracket);
             remaining = new_remaining;
         } else {
             break;
         }
     }
-    
+
     Ok((remaining, segments))
 }
 
@@ -106,32 +99,48 @@ pub fn parse_path(input: &str) -> IResult<&str, Path> {
     // Check if path starts with a bracket
     if input.starts_with('[') {
         let (remaining, first_segments) = parse_path_segment_or_key_with_brackets(input)?;
-        
+
         if remaining.is_empty() {
-            return Ok((remaining, Path { segments: first_segments }));
+            return Ok((
+                remaining,
+                Path {
+                    segments: first_segments,
+                },
+            ));
         }
-        
+
         // If there's more path after the initial bracket
         if remaining.starts_with('.') {
             let (remaining, _) = char('.')(remaining)?;
-            let (remaining, rest) = separated_list1(char('.'), parse_path_segment_or_key_with_brackets)(remaining)?;
-            
+            let (remaining, rest) =
+                separated_list1(char('.'), parse_path_segment_or_key_with_brackets)(remaining)?;
+
             let mut all_segments = first_segments;
             for segment_group in rest {
                 all_segments.extend(segment_group);
             }
-            
-            return Ok((remaining, Path { segments: all_segments }));
+
+            return Ok((
+                remaining,
+                Path {
+                    segments: all_segments,
+                },
+            ));
         }
-        
-        Ok((remaining, Path { segments: first_segments }))
+
+        Ok((
+            remaining,
+            Path {
+                segments: first_segments,
+            },
+        ))
     } else {
         // Normal path parsing
         map(
             separated_list1(char('.'), parse_path_segment_or_key_with_brackets),
-            |segment_groups| Path { 
-                segments: segment_groups.into_iter().flatten().collect() 
-            }
+            |segment_groups| Path {
+                segments: segment_groups.into_iter().flatten().collect(),
+            },
         )(input)
     }
 }
@@ -148,11 +157,11 @@ fn parse_tuple(input: &str) -> IResult<&str, PathSegment> {
             tuple((char('('), ws)),
             separated_list1(
                 tuple((ws, char(','), ws)),
-                delimited(ws, parse_single_path, ws)
+                delimited(ws, parse_single_path, ws),
             ),
-            tuple((ws, char(')')))
+            tuple((ws, char(')'))),
         ),
-        PathSegment::Tuple
+        PathSegment::Tuple,
     )(input)
 }
 
