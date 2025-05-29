@@ -130,20 +130,39 @@ class KEEP(SEED):
         """KEEP seeds preserve their value during processing."""
         return self.value
 
-class ELIF(SEED):
-    """
-    An ELIF object contains a conditional statement and a dictionary which outlines the possible outcomes
-    """
+class CASE(SEED):
+    """Switch-like pattern matching for values with ordered evaluation."""
     
-    def __init__(self, condition: ConditionalCheck, if_true: Any, if_false: Any = None):
-        self.condition = condition
-        self.if_true = if_true
-        self.if_false = if_false
+    def __init__(self, path: str, cases: dict[Any, Any] | list[tuple[Any, Any]], default: Any = None):
+        self.path = path
+        # Support both dict and list for ordered evaluation
+        if isinstance(cases, dict):
+            self.cases = list(cases.items())
+        else:
+            self.cases = cases
+        self.default = default
     
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
-        if self.condition(data):
-            return self.if_true
-        return self.if_false
+        value = get(data, self.path)
+        
+        for case_key, case_value in self.cases:
+            # Exact match
+            if not callable(case_key) and value == case_key:
+                return case_value
+            
+            # Function match
+            if callable(case_key):
+                try:
+                    if case_key(value):
+                        return case_value
+                except (TypeError, AttributeError):
+                    continue
+        
+        return self.default
+    
+    def __call__(self, data: Any) -> Any:
+        """Allow callable syntax for backward compatibility."""
+        return self.process(data)
 
 class COALESCE(SEED):
     """Coalesce -- grab first non-empty value from multiple paths."""
@@ -177,7 +196,9 @@ class SPLIT(SEED):
         if value is None:
             return None
         parts = value.split(self.pattern)
-        if abs(self.part) > len(parts):
+        # Check bounds: for positive indices, must be < len(parts)
+        # for negative indices, must be >= -len(parts)
+        if self.part >= len(parts) or self.part < -len(parts):
             return None
         result = parts[self.part]
         if self.then:
@@ -253,12 +274,3 @@ class FLATTEN(SEED):
     def __call__(self, data: Any) -> Any:
         """Allow callable syntax for backward compatibility."""
         return self.process(data)
-
-class DEFAULT(SEED):
-    """Default value if multiple options available."""
-    
-    def __init__(self, value: Any):
-        self.value = value
-    
-    def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
-        return self.value

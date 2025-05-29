@@ -2,7 +2,7 @@ from .chidian import get
 from .lib import put
 from .collection import DataCollection
 from .piper import DictPiper
-from .seeds import DROP, KEEP, ELIF, COALESCE, SPLIT, MERGE, FLATTEN, DEFAULT
+from .seeds import DROP, KEEP, CASE, COALESCE, SPLIT, MERGE, FLATTEN
 
 __all__ = [
     "get",
@@ -12,10 +12,9 @@ __all__ = [
     "Piper",
     "DROP",
     "KEEP",
-    "ELIF",
+    "CASE",
     "COALESCE",
     "SPLIT",
     "MERGE",
     "FLATTEN",
-    "DEFAULT",
 ]
