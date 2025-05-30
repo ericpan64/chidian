@@ -20,23 +20,30 @@ There is one core datatype in chidian: the dictionary with string-based keys (`d
 
 The file structure is organized into the core abstractions of the library (re-ordered most essential first):
 ```
-.
+./chidian
 ├── LICENSE
 ├── README.md
-└── chidian-py
-    ├── Cargo.lock
+├── chidian-core/           # Core Rust library for path parsing and data types
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs          # Re-exports for core functionality 
+│       ├── parser.rs       # Path parsing logic (JMESPath-inspired)
+│       └── types.rs        # Core data types and structures
+└── chidian-py/             # Python bindings and main API
     ├── Cargo.toml
-    ├── chidian
-    │   ├── __init__.py
-    │   ├── lib.py      # `get` + `put` -- the core functions (bi-directional inverses)
-    │   ├── group.py    # `DataCollection` -- the core data wrapper (use in conjunction with Pydantic `BaseModel`s)
-    │   ├── mapper.py   # `StringMapper` + `StructMapper` -- the core mapping logic expressed as readable `dict[str, Any]`
-    │   ├── piper.py    # `DictPiper` -- the core mapping runtime/execution class
-    │   ├── seeds.py    # `DROP`, `KEEP`, etc. -- utilities to help keep readings mappable (Piper processes them)
-    │   └── partials.py # `import partials as p` -- a set of standard operations expressed as partial functions (Rust-optimized)
+    ├── chidian/
+    │   ├── __init__.py     # Main exports
+    │   ├── lib.py          # `put` -- bidirectional complement to `get` (Rust-optimized)
+    │   ├── collection.py   # `DataCollection` -- the core data wrapper for dict collections
+    │   ├── mapper.py       # `StringMapper` + `StructMapper` -- mapping logic as readable `dict[str, Any]`
+    │   ├── piper.py        # `DictPiper` -- the core mapping runtime/execution class
+    │   ├── seeds.py        # `DROP`, `KEEP`, `CASE`, etc. -- SEED objects for data transformations
+    │   └── partials.py     # `import partials as p` -- standard operations as partial functions
     ├── pyproject.toml
-    ├── src/...         # Rust optimizations for libraries
-    ├── tests/...       # Tests for each python module
+    ├── src/                # Rust code for Python bindings
+    │   ├── lib.rs          # PyO3 bindings
+    │   └── py_traversal.rs # Rust-optimized `get` function
+    ├── tests/              # Tests for each Python module
     └── uv.lock
 ```
 
