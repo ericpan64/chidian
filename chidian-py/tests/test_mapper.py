@@ -1,5 +1,6 @@
 import pytest
-from chidian.mapper import StringMapper
+from typing import Optional
+from chidian.mapper import StringMapper, Mapper
 
 
 def test_basic_string_mapper():
@@ -47,10 +48,8 @@ def test_many_to_one_mapping():
     assert status_mapper['I'] == 'inactive'
     assert status_mapper['P'] == 'pending'
     
-    # Check conflicts are detected
-    conflicts = status_mapper.get_conflicts()
-    assert 'A' in conflicts
-    assert set(conflicts['A']) == {'active', 'current', 'ongoing'}
+    # Test that unknown keys work with get
+    assert status_mapper.get('unknown', 'DEFAULT') == 'DEFAULT'
 
 
 def test_default_values():
@@ -287,9 +286,9 @@ def test_struct_mapper_validation():
         strict=False
     )
     
-    # Validation should show the issues
-    issues = mapper.validate_mapping()
-    assert 'required_field' in issues['missing_required_fields']
+    # Validation is now internal - mapper was created successfully in non-strict mode
+    assert mapper.strict is False
+    assert mapper.metadata == {}
 
 
 def test_struct_mapper_type_validation():
@@ -558,3 +557,110 @@ def test_struct_mapper_nested_mappings():
     assert result.patient['id'] == '789'
     assert result.patient['display'] == 'John Doe'
     assert result.codes == ['8480-6', '271649006']
+
+
+def test_mapper_protocol():
+    """Test that mappers implement the Mapper protocol."""
+    # StringMapper implements Mapper protocol
+    string_mapper = StringMapper({'a': '1'})
+    assert isinstance(string_mapper, Mapper)
+    assert hasattr(string_mapper, 'forward')
+    assert hasattr(string_mapper, 'metadata')
+    
+    # Check protocol methods work
+    assert string_mapper.forward('a') == '1'
+    assert isinstance(string_mapper.metadata, dict)
+    
+    # StringMapper has additional methods beyond the protocol
+    assert hasattr(string_mapper, 'reverse')
+    assert hasattr(string_mapper, 'can_reverse')
+    assert string_mapper.reverse('1') == 'a'
+    assert string_mapper.can_reverse() is True
+    
+    # StructMapper implements Mapper protocol
+    from chidian.mapper import StructMapper
+    from pydantic import BaseModel
+    
+    class Source(BaseModel):
+        value: str
+    
+    class Target(BaseModel):
+        result: str
+    
+    struct_mapper = StructMapper(
+        source_model=Source,
+        target_model=Target,
+        mapping={'result': 'value'}
+    )
+    
+    assert isinstance(struct_mapper, Mapper)
+    assert hasattr(struct_mapper, 'forward')
+    assert hasattr(struct_mapper, 'metadata')
+    
+    # Check protocol methods work
+    source = Source(value='test')
+    result = struct_mapper.forward(source)
+    assert result.result == 'test'
+    assert isinstance(struct_mapper.metadata, dict)
+    
+    # StructMapper has additional methods beyond the protocol
+    assert hasattr(struct_mapper, 'reverse')
+    assert hasattr(struct_mapper, 'can_reverse')
+    assert struct_mapper.can_reverse() is False
+    
+    # Reverse should raise NotImplementedError
+    with pytest.raises(NotImplementedError):
+        struct_mapper.reverse(Target(result='test'))
+
+
+def test_custom_mapper_protocol():
+    """Test that custom mappers can implement the Mapper protocol."""
+    # Create a minimal custom mapper that implements only the protocol requirements
+    class LookupMapper:
+        """Simple lookup table mapper implementing the Mapper protocol."""
+        def __init__(self, lookup_table: dict):
+            self.lookup = lookup_table
+            self.metadata = {'type': 'lookup', 'size': len(lookup_table)}
+        
+        def forward(self, key: str) -> Optional[str]:
+            return self.lookup.get(key)
+    
+    # Create instance
+    mapper = LookupMapper({
+        'red': '#FF0000',
+        'green': '#00FF00',  
+        'blue': '#0000FF'
+    })
+    
+    # Verify it implements the protocol
+    assert isinstance(mapper, Mapper)
+    
+    # Test protocol methods
+    assert mapper.forward('red') == '#FF0000'
+    assert mapper.forward('unknown') is None
+    assert mapper.metadata['size'] == 3
+    
+    # Create a more complex mapper with additional methods
+    class AdvancedLookupMapper(LookupMapper):
+        """Mapper with additional functionality beyond the protocol."""
+        def __init__(self, lookup_table: dict):
+            super().__init__(lookup_table)
+            self.reverse_lookup = {v: k for k, v in lookup_table.items()}
+        
+        def reverse(self, value: str) -> Optional[str]:
+            return self.reverse_lookup.get(value)
+        
+        def can_reverse(self) -> bool:
+            return len(self.lookup) == len(self.reverse_lookup)
+    
+    # Test the advanced mapper
+    adv_mapper = AdvancedLookupMapper({
+        'red': '#FF0000',
+        'green': '#00FF00',
+        'blue': '#0000FF'  
+    })
+    
+    assert isinstance(adv_mapper, Mapper)
+    assert adv_mapper.forward('red') == '#FF0000'
+    assert adv_mapper.reverse('#00FF00') == 'green'
+    assert adv_mapper.can_reverse() is True

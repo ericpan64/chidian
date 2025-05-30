@@ -3,7 +3,7 @@ from .lib import put
 from .collection import DataCollection
 from .piper import DictPiper
 from .seeds import DROP, KEEP, CASE, COALESCE, SPLIT, MERGE, FLATTEN
-from .mapper import StringMapper, StructMapper
+from .mapper import Mapper, StringMapper, StructMapper
 from .partials import FunctionChain, ChainableFn
 
 __all__ = [
@@ -18,6 +18,7 @@ __all__ = [
     "SPLIT",
     "MERGE",
     "FLATTEN",
+    "Mapper",
     "StringMapper",
     "StructMapper",
     "FunctionChain",

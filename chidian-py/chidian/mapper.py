@@ -1,14 +1,24 @@
-from typing import Any, Optional
+from typing import Any, Optional, Protocol, runtime_checkable
 
 """
-Base class for data transformation between different representations.
+Base protocol for data transformation between different representations.
 
 A Mapper defines how to convert data from one format to another, supporting
 use cases like healthcare data interoperability (FHIR ↔ OMOP).
 """
-# Make this a Python protocol
-class Mapper(dict):
-    ...
+@runtime_checkable
+class Mapper(Protocol):
+    """Protocol defining the interface for all mapper types.
+    
+    A Mapper transforms data from one format to another. The core operation
+    is forward(), which all mappers must implement.
+    """
+    
+    metadata: dict[str, Any]
+    
+    def forward(self, source: Any) -> Any:
+        """Transform from source to target format."""
+        ...
 
 """
 Bidirectional string mapper for code/terminology translations.
@@ -30,7 +40,7 @@ Examples:
     >>> mapper['absent']  # Returns first key as default
     'LA6699-8'
 """
-class StringMapper(Mapper):
+class StringMapper(dict):
     def __init__(self, mappings: dict, default: Any = None, metadata: Optional[dict] = None):
         """
         Initialize a bidirectional string mapper.
@@ -105,22 +115,6 @@ class StringMapper(Mapper):
     def can_reverse(self) -> bool:
         """StringMapper always supports reverse transformation."""
         return True
-    
-    def get_conflicts(self) -> dict[str, list[str]]:
-        """Return any reverse mapping conflicts (multiple sources → same target)."""
-        conflicts = {}
-        reverse_counts = {}
-        
-        for key, value in self._forward.items():
-            if value not in reverse_counts:
-                reverse_counts[value] = []
-            reverse_counts[value].append(key)
-        
-        for value, keys in reverse_counts.items():
-            if len(keys) > 1:
-                conflicts[value] = keys
-        
-        return conflicts
 
 """
 Flexible structure mapper for complex data transformations.
@@ -143,7 +137,7 @@ Example:
     ...     }
     ... })
 """
-class StructMapper(Mapper):
+class StructMapper:
     def __init__(
         self,
         source_model: type,  # Required Pydantic BaseModel
@@ -162,7 +156,6 @@ class StructMapper(Mapper):
             strict: If True, validate against models and fail on errors (default True)
             metadata: Optional metadata about the mapping
         """
-        super().__init__()
         
         # Validate that models are Pydantic BaseModels
         if not (hasattr(source_model, 'model_fields') or hasattr(source_model, '__fields__')):
@@ -176,12 +169,13 @@ class StructMapper(Mapper):
         self.strict = strict
         self.metadata = metadata or {}
         
-        # Validate mapping at initialization
-        validation_issues = self.validate_mapping()
-        if self.strict and validation_issues['missing_required_fields']:
-            raise ValueError(
-                f"Missing required target fields in mapping: {validation_issues['missing_required_fields']}"
-            )
+        # Validate mapping at initialization if strict
+        if self.strict:
+            validation_issues = self._validate_mapping()
+            if validation_issues['missing_required_fields']:
+                raise ValueError(
+                    f"Missing required target fields in mapping: {validation_issues['missing_required_fields']}"
+                )
         
         # Import here to avoid circular imports
         from .chidian import get as _get
@@ -190,7 +184,7 @@ class StructMapper(Mapper):
         self._function_chain = FunctionChain
         self._chainable_fn = ChainableFn
     
-    def forward(self, source: 'BaseModel') -> 'BaseModel':
+    def forward(self, source: Any) -> Any:
         """
         Transform source model to target model.
         
@@ -292,7 +286,7 @@ class StructMapper(Mapper):
         else:
             return mapping_spec
     
-    def reverse(self, target: Any) -> Any:
+    def reverse(self, target: Any) -> Any:  # noqa: ARG002
         """
         Reverse transformation (target to source).
         
@@ -308,7 +302,7 @@ class StructMapper(Mapper):
         """StructMapper generally cannot reverse complex transformations."""
         return False
     
-    def validate_mapping(self) -> dict[str, list[str]]:
+    def _validate_mapping(self) -> dict[str, list[str]]:
         """
         Validate the mapping against source and target models.
         
@@ -323,7 +317,6 @@ class StructMapper(Mapper):
         
         # Get target model fields
         target_fields = self._get_model_fields(self.target_model)
-        source_fields = self._get_model_fields(self.source_model)
         
         # Check for required fields
         required_fields = {
