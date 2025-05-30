@@ -1,4 +1,4 @@
-use crate::parser::{Path, PathSegment};
+use chidian_core::parser::{Path, PathSegment};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 

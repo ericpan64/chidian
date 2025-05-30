@@ -1,4 +1,4 @@
-from .chidian import get
+from .chidian_rs import get
 from .lib import put
 from .collection import DataCollection
 from .piper import DictPiper

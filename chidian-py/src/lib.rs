@@ -1,10 +1,9 @@
 use pyo3::prelude::*;
 
-mod parser;
-mod traversal;
+mod py_traversal;
 
-use parser::parse_path;
-use traversal::{apply_functions, traverse_path, traverse_path_strict};
+use chidian_core::parser::parse_path;
+use py_traversal::{apply_functions, traverse_path, traverse_path_strict};
 
 #[pyfunction]
 #[pyo3(signature = (source, key, default=None, apply=None, strict=false))]
@@ -18,7 +17,7 @@ fn get(
 ) -> PyResult<PyObject> {
     let strict = strict.unwrap_or(false);
 
-    // Parse the path
+    // Parse the path using chidian-core
     let path = match parse_path(key) {
         Ok((remaining, path)) if remaining.is_empty() => path,
         _ => {
@@ -57,7 +56,7 @@ fn get(
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn chidian(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn chidian_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get, m)?)?;
     Ok(())
 }

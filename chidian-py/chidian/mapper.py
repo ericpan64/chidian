@@ -178,7 +178,7 @@ class StructMapper:
                 )
         
         # Import here to avoid circular imports
-        from .chidian import get as _get
+        from .chidian_rs import get as _get
         from .partials import FunctionChain, ChainableFn
         self._get = _get
         self._function_chain = FunctionChain

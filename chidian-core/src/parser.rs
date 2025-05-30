@@ -175,3 +175,34 @@ fn parse_path_segment_or_key_with_brackets(input: &str) -> IResult<&str, Vec<Pat
         parse_key_with_brackets,
     ))(input)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_simple_path() {
+        let (_, path) = parse_path("patient.name").unwrap();
+        assert_eq!(path.segments.len(), 2);
+        assert_eq!(path.segments[0], PathSegment::Key("patient".to_string()));
+        assert_eq!(path.segments[1], PathSegment::Key("name".to_string()));
+    }
+
+    #[test]
+    fn test_parse_path_with_index() {
+        let (_, path) = parse_path("items[0].name").unwrap();
+        assert_eq!(path.segments.len(), 3);
+        assert_eq!(path.segments[0], PathSegment::Key("items".to_string()));
+        assert_eq!(path.segments[1], PathSegment::Index(0));
+        assert_eq!(path.segments[2], PathSegment::Key("name".to_string()));
+    }
+
+    #[test]
+    fn test_parse_wildcard() {
+        let (_, path) = parse_path("items[*].id").unwrap();
+        assert_eq!(path.segments.len(), 3);
+        assert_eq!(path.segments[0], PathSegment::Key("items".to_string()));
+        assert_eq!(path.segments[1], PathSegment::Wildcard);
+        assert_eq!(path.segments[2], PathSegment::Key("id".to_string()));
+    }
+}

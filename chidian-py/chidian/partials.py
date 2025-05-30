@@ -8,7 +8,7 @@ from typing import Any, Callable, Iterable, TypeVar, Union, List
 import operator
 from functools import partial, reduce
 
-from .chidian import get as _get
+from .chidian_rs import get as _get
 
 T = TypeVar('T')
 

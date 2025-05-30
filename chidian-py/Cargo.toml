@@ -1,13 +1,13 @@
 [package]
 name = "chidian"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "chidian"
+name = "chidian_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = "0.24.0"
-nom = "7.1"
+chidian-core = { path = "../chidian-core" }

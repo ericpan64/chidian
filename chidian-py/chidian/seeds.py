@@ -8,7 +8,7 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any, TypeAlias
 
-from .chidian import get
+from .chidian_rs import get
 
 ApplyFunc: TypeAlias = Callable[[Any], Any]
 ConditionalCheck: TypeAlias = Callable[[Any], bool]
