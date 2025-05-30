@@ -4,15 +4,17 @@ from pydantic import BaseModel
 import json
 import pytest
 
+@pytest.fixture(scope="function") 
 def test_A() -> dict[str, Any]:
     with open("tests/A.json", "r") as f:
         return json.load(f)
 
+@pytest.fixture(scope="function")
 def test_B() -> dict[str, Any]:
     with open("tests/B.json", "r") as f:
         return json.load(f)
 
-def simple_nested_list() -> list[dict[str, Any]]:
+def _simple_nested_list() -> list[dict[str, Any]]:
     return [
         {"patient": {"id": "abc123", "active": True}},
         {"patient": {"id": "def456", "active": True}},
@@ -20,7 +22,7 @@ def simple_nested_list() -> list[dict[str, Any]]:
     ]
 
 
-def deep_nested_list() -> list[dict[str, Any]]:
+def _deep_nested_list() -> list[dict[str, Any]]:
     return [
         {
             "patient": {
@@ -72,18 +74,28 @@ def deep_nested_list() -> list[dict[str, Any]]:
 
 
 @pytest.fixture(scope="function")
+def simple_nested_list() -> list[dict[str, Any]]:
+    return _simple_nested_list()
+
+
+@pytest.fixture(scope="function") 
+def deep_nested_list() -> list[dict[str, Any]]:
+    return _deep_nested_list()
+
+
+@pytest.fixture(scope="function")
 def list_data() -> list[Any]:
-    return simple_nested_list()
+    return _simple_nested_list()
 
 
 @pytest.fixture(scope="function")
 def simple_data() -> dict[str, Any]:
     return {
         "data": {"patient": {"id": "abc123", "active": True}},
-        "list_data": simple_nested_list(),
+        "list_data": _simple_nested_list(),
     }
 
 
 @pytest.fixture(scope="function")
 def nested_data() -> dict[str, Any]:
-    return {"data": deep_nested_list()}
+    return {"data": _deep_nested_list()}

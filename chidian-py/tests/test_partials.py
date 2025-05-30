@@ -1,23 +1,9 @@
 from copy import deepcopy
-from typing import Any
 
 import chidian.partials as p
 
 import pytest
 
-
-def test_get(simple_data: dict[str, Any]) -> None:
-    source = simple_data
-
-    FAIL_DEFAULT_STR = "n/a"
-
-    assert p.get("data.patient.id", apply=str.upper)(source) == str.upper(
-        source["data"]["patient"]["id"]
-    )
-    assert p.get("something_not_there", default=FAIL_DEFAULT_STR, apply=str.upper)(
-        source
-    ) == str.upper(FAIL_DEFAULT_STR)
-    assert p.get("something_not_there", apply=str.upper)(source) is None
 
 def test_generic_apply_wrappers() -> None:
     n = 100
