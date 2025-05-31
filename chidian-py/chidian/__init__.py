@@ -2,6 +2,9 @@ from .chidian_rs import get
 from .lib import put
 from .recordset import RecordSet
 from .piper import DictPiper
+from .view import View
+from .lens import Lens
+from .typed_piper import TypedPiper
 from .seeds import DROP, KEEP, CASE, COALESCE, SPLIT, MERGE, FLATTEN
 from .partials import FunctionChain, ChainableFn
 
@@ -10,6 +13,9 @@ __all__ = [
     "put", 
     "RecordSet",
     "DictPiper",
+    "View",
+    "Lens",
+    "TypedPiper",
     "DROP",
     "KEEP",
     "CASE",
