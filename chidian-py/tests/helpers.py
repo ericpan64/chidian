@@ -2,7 +2,8 @@
 
 from typing import Any, Callable
 from chidian import get
-from chidian.seeds import MERGE, CASE, COALESCE, SPLIT
+from chidian import template, case, first_non_empty
+import chidian.partials as p
 from chidian.lexicon import Lexicon
 
 
@@ -18,9 +19,12 @@ def patient_mapper(data: dict[str, Any]) -> dict[str, Any]:
 
 def observation_mapper(data: dict[str, Any]) -> dict[str, Any]:
     """Map FHIR observation to flat structure."""
+    # Use partials for cleaner extraction
+    extract_patient_id = p.get("subject.reference") >> p.split("/") >> p.last
+    
     return {
         "id": get(data, "id"),
-        "patient_id": SPLIT("subject.reference", "/", -1).process(data),
+        "patient_id": extract_patient_id(data),
         "code": get(data, "code.coding[0].code"),
         "value": get(data, "valueQuantity.value"),
         "unit": get(data, "valueQuantity.unit", default="")
@@ -29,17 +33,29 @@ def observation_mapper(data: dict[str, Any]) -> dict[str, Any]:
 
 def name_mapper(data: dict[str, Any]) -> dict[str, Any]:
     """Map complex name structures."""
+    name_template = template("{} {}")
+    
     return {
-        "full_name": MERGE("name.given[0]", "name.family", template="{} {}").process(data),
-        "display": COALESCE(["name.text", "name.family"], default="Unknown").process(data)
+        "full_name": name_template(
+            get(data, "name.given[0]"),
+            get(data, "name.family")
+        ),
+        "display": first_non_empty("name.text", "name.family", default="Unknown")(data)
     }
 
 
 def address_mapper(data: dict[str, Any]) -> dict[str, Any]:
     """Map address with type classification."""
+    type_classifier = p.get("use") >> case({"home": "🏠", "work": "🏢", "old": "📍"}, default="📮")
+    address_template = template("{}, {} {}")
+    
     return {
-        "type": CASE("use", {"home": "🏠", "work": "🏢", "old": "📍"}, default="📮").process(data),
-        "full": MERGE("line[0]", "city", "postalCode", template="{}, {} {}").process(data)
+        "type": type_classifier(data),
+        "full": address_template(
+            get(data, "line[0]"),
+            get(data, "city"),
+            get(data, "postalCode")
+        )
     }
 
 

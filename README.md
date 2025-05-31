@@ -49,14 +49,13 @@ The file structure is organized into the core abstractions of the library (re-or
     ├── Cargo.toml
     ├── chidian/
     │   ├── __init__.py     # Main exports
-    │   ├── lib.py          # `put` -- bidirectional complement to `get` (Rust-optimized)
-    │   ├── lens.py         # `put` -- bidirectional complement to `get` (Rust-optimized)
+    │   ├── lib.py          # `put` -- bidirectional complement to `get`
+    │   ├── lens.py         # `Lens` -- functional composition for data transformations
     │   ├── recordset.py    # `RecordSet` -- the core data wrapper for dict collections
-    │   ├── mapper.py       # `Mapper` -- base protocol for all data transformations
     │   ├── lexicon.py      # `Lexicon` -- bidirectional string-to-string mappings (e.g., code lookups)
     │   ├── view.py         # `View` -- structured data transformations with Pydantic models
-    │   ├── piper.py        # `DictPiper` -- the core mapping runtime/execution class
-    │   ├── seeds.py        # `DROP`, `KEEP`, `CASE`, etc. -- SEED objects for data transformations
+    │   ├── piper.py        # `DictPiper`, `TypedPiper` -- the core mapping runtime/execution classes
+    │   ├── seeds.py        # `DROP`, `KEEP`, `CASE`, `MERGE`, etc. -- SEED objects for data transformations
     │   └── partials.py     # `import partials as p` -- standard operations as partial functions
     ├── pyproject.toml
     ├── src/                # Rust code for Python bindings
@@ -68,86 +67,154 @@ The file structure is organized into the core abstractions of the library (re-or
 
 ## Usage
 
-Let's say we want to conver this source [JSON A](./chidian-py/tests/A.json) into this result [JSON B](./chidian-py/tests/B.json) (note: we take the end of the `previous` list).
+Let's say we want to convert this source [JSON A](./chidian-py/tests/A.json) into this result [JSON B](./chidian-py/tests/B.json) (note: we take the last of the `previous` list).
 
 If you look at the data, JSON A is _more nested + expressive_ and JSON B is _more flat + compressed_. 
 
-We can balance the expressiveness of then nesting through the expressive structure of the `View`
+chidian makes this transformation easy with its functional approach and composable operations.
 
 ### A -> B
 
 In Python:
 ```python
-from chidian import get, DictPiper
-from chidian.seeds import MERGE, FLATTEN
+from chidian import get, DictPiper, template
 import chidian.partials as p
 
 def A_to_B(source):
     # Define reusable transformations
     format_address = [
-        lambda addr: f"{addr['street'][0]}\n{addr['street'][1]}\n{addr['city']}, {addr['state']} {addr['postal_code']}\n{addr['country']}"
+        lambda addr: f"{addr['street'][0]}\n{addr['street'][1]}\n{addr['city']}\n{addr['postal_code']}\n{addr['country']}"
     ]
+    
+    # Use new partials API for cleaner composition
+    full_name_formatter = template("{} {} {}", skip_none=True)
     
     # 80%+ of logic in the mapping dictionary
     return {
-        "full_name": MERGE(
-            get(source, "name.prefix"),
+        "full_name": full_name_formatter(
             get(source, "name.first"), 
             get(source, "name.given[*]", apply=[p.join(" ")]),
-            get(source, "name.suffix"),
-            template="{} {} {} {}",
-            skip_none=True
+            get(source, "name.suffix")
         ),
         "current_address": get(source, "address.current", apply=format_address),
         "last_previous_address": get(source, "address.previous[-1]", apply=format_address)
     }
 
+# Create and use the mapper
 mapper = DictPiper(A_to_B)
+result = mapper.pipe(source_data)
 ```
 
-### B -> A
+### B -> A (Reverse transformation)
 
 In Python:
 ```python
 from chidian import get, DictPiper
-from chidian.seeds import SPLIT, CASE
+from chidian.seeds import SPLIT
 import chidian.partials as p
 
 def B_to_A(source):
-    # Define complex transformations
-    parse_name = [
-        str.split,
-        lambda parts: {
-            "prefix": next((p for p in parts if "." in p), None),
-            "first": parts[0] if parts and "." not in parts[0] else (parts[1] if len(parts) > 1 else None),
-            "given": [p for p in parts[1:-1] if "." not in p] if len(parts) > 2 else [],
+    # Define complex transformations using function chains
+    parse_name = (
+        p.split() >>  # Split on whitespace
+        p.ChainableFn(lambda parts: {
+            "first": parts[0] if parts else None,
+            "given": parts[1:-1] if len(parts) > 2 else [],
             "suffix": parts[-1] if len(parts) > 1 and "." in parts[-1] else None
-        }
-    ]
+        })
+    )
     
-    parse_address = [
-        lambda addr: addr.split("\n"),
-        lambda lines: {
+    parse_address = (
+        p.split("\n") >>
+        p.ChainableFn(lambda lines: {
             "street": lines[:2] if len(lines) >= 2 else [],
-            "city": lines[2].split(",")[0] if len(lines) > 2 else "",
-            "state": lines[2].split(",")[1].strip().split()[0] if len(lines) > 2 and "," in lines[2] else "",
-            "postal_code": lines[2].split(",")[1].strip().split()[1] if len(lines) > 2 and "," in lines[2] and len(lines[2].split(",")[1].strip().split()) > 1 else "",
-            "country": lines[3] if len(lines) > 3 else ""
-        }
-    ]
+            "city": lines[2] if len(lines) > 2 else "",
+            "state": "England",  # Default for this example
+            "postal_code": lines[3] if len(lines) > 3 else "",
+            "country": lines[4] if len(lines) > 4 else ""
+        })
+    )
     
-    # Mapping dictionary with most logic
+    # Bidirectional mapping
     return {
-        "name": get(source, "full_name", apply=parse_name),
+        "name": get(source, "full_name", apply=[parse_name]),
         "address": {
-            "current": get(source, "current_address", apply=parse_address),
+            "current": get(source, "current_address", apply=[parse_address]),
             "previous": [
-                get(source, "last_previous_address", apply=parse_address)
+                get(source, "last_previous_address", apply=[parse_address])
             ]
         }
     }
 
-mapper = DictPiper(B_to_A)
+# Create and use the reverse mapper
+reverse_mapper = DictPiper(B_to_A)
+original_data = reverse_mapper.pipe(transformed_data)
+```
+
+### Additional Features
+
+**Partials Operations** for advanced transformations:
+```python
+from chidian import case, first_non_empty, DROP, KEEP
+import chidian.partials as p
+
+# Conditional logic with partials
+status_mapper = (
+    p.get("patient.status") >> 
+    case({
+        "active": "ACTIVE",
+        lambda x: x in ["inactive", "deceased"]: "INACTIVE"
+    }, default="UNKNOWN")
+)
+status = status_mapper(data)
+
+# Fallback values using first_non_empty
+name = first_non_empty("display_name", "full_name", "name.first")(data)
+```
+
+**Functional Composition** with partials:
+```python
+import chidian.partials as p
+
+# Chain operations with >> operator
+process_id = (
+    p.get("patient.reference") >>
+    p.extract_id() >>
+    p.upper
+)
+
+# Email domain extraction
+domain_extractor = (
+    p.get("email") >>
+    p.split("@") >>
+    p.at_index(1)
+)
+
+# Use in transformations
+result = {
+    "patient_id": process_id(source_data),
+    "email_domain": domain_extractor(source_data)
+}
+```
+
+**Type-Safe Mappings** with Pydantic:
+```python
+from chidian import View, TypedPiper
+from pydantic import BaseModel
+
+class Patient(BaseModel):
+    id: str
+    name: str
+    active: bool
+
+# Define transformation with type safety
+patient_view = View(Patient, {
+    "id": "patient.id",
+    "name": "patient.name.display", 
+    "active": "patient.active"
+})
+
+typed_mapper = TypedPiper(patient_view)
 ```
 
 ## Contributing

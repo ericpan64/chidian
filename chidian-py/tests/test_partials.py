@@ -225,3 +225,115 @@ def test_function_chain_repr():
     assert "upper" in repr_str
     assert "strip" in repr_str
     assert ">>" in repr_str
+
+
+# Tests for new partials that replaced SEEDs
+def test_case_partial():
+    """Test case partial function."""
+    from chidian import case
+    
+    # Test with dict cases
+    status_mapper = case({
+        "active": "✓ Active",
+        "inactive": "✗ Inactive"
+    }, default="Unknown")
+    
+    assert status_mapper("active") == "✓ Active"
+    assert status_mapper("inactive") == "✗ Inactive"
+    assert status_mapper("pending") == "Unknown"
+    
+    # Test with function cases
+    range_mapper = case([
+        (lambda x: x > 100, "HIGH"),
+        (lambda x: x > 50, "MEDIUM"),
+        (lambda x: x >= 0, "LOW")
+    ], default="INVALID")
+    
+    assert range_mapper(150) == "HIGH"
+    assert range_mapper(75) == "MEDIUM"
+    assert range_mapper(25) == "LOW"
+    assert range_mapper(-10) == "INVALID"
+
+
+def test_first_non_empty_partial():
+    """Test first_non_empty partial function."""
+    from chidian import first_non_empty
+    
+    data = {
+        "missing": None,
+        "empty": "",
+        "value": "found",
+        "backup": "backup_value"
+    }
+    
+    # Test with multiple paths
+    coalesce = first_non_empty("missing", "empty", "value", default="DEFAULT")
+    assert coalesce(data) == "found"
+    
+    # Test with all None/empty
+    coalesce_empty = first_non_empty("missing", "empty", default="DEFAULT")
+    assert coalesce_empty(data) == "DEFAULT"
+    
+    # Test without default
+    coalesce_no_default = first_non_empty("value", "backup")
+    assert coalesce_no_default(data) == "found"
+
+
+def test_template_partial():
+    """Test template partial function."""
+    from chidian import template
+    
+    # Basic template
+    name_template = template("{} {}")
+    assert name_template("John", "Doe") == "John Doe"
+    
+    # Template with skip_none
+    full_template = template("{} {} {}", skip_none=True)
+    assert full_template("John", None, "Doe") == "John Doe"
+    assert full_template("John", "Middle", "Doe") == "John Middle Doe"
+    assert full_template(None, None, None) == ""
+
+
+def test_flatten_partial():
+    """Test flatten partial function."""
+    from chidian import flatten
+    
+    data = {
+        "names": ["John", "Jane"],
+        "ids": ["123", "456"],
+        "empty": [],
+        "single": "solo"
+    }
+    
+    # Test basic flatten
+    flatten_func = flatten(["names", "ids"])
+    result = flatten_func(data)
+    assert result == "John, Jane, 123, 456"
+    
+    # Test custom delimiter
+    flatten_pipe = flatten(["names"], delimiter=" | ")
+    assert flatten_pipe(data) == "John | Jane"
+    
+    # Test with empty and single values
+    flatten_mixed = flatten(["names", "empty", "single"])
+    assert flatten_mixed(data) == "John, Jane, solo"
+
+
+def test_partials_integration_with_chains():
+    """Test that new partials work with function chains."""
+    from chidian import case, first_non_empty, template
+    
+    # Chain case with other operations
+    status_chain = p.get("status") >> case({"1": "active", "0": "inactive"}, default="unknown") >> p.upper
+    data = {"status": "1"}
+    assert status_chain(data) == "ACTIVE"
+    
+    # Use template in a complex chain
+    format_name = template("{} {}")
+    name_chain = p.ChainableFn(lambda data: format_name(
+        p.get("first")(data),
+        p.get("last")(data)
+    )) >> p.upper
+    
+    name_data = {"first": "john", "last": "doe"}
+    assert name_chain(name_data) == "JOHN DOE"

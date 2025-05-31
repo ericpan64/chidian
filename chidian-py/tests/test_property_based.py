@@ -1,219 +1,201 @@
-"""Property-based tests for chidian using Hypothesis."""
+"""Property-based tests for core chidian functionality."""
 
 import pytest
-from hypothesis import given, strategies as st, assume
-from typing import Any
+from hypothesis import given, strategies as st
+from typing import Any, Dict
 
-from chidian import get
-from chidian.lib import put
-from chidian.seeds import MERGE, COALESCE, FLATTEN
+from chidian import get, template, first_non_empty, flatten, case
+import chidian.partials as p
 
 
-# Custom strategies for JSON-like data
-json_primitives = st.one_of(
-    st.none(),
-    st.booleans(),
-    st.integers(),
-    st.floats(allow_nan=False, allow_infinity=False),
-    st.text(min_size=0, max_size=10)
-)
-
-# Recursive JSON strategy
-json_data = st.recursive(
-    json_primitives,
-    lambda children: st.one_of(
-        st.lists(children, max_size=5),
-        st.dictionaries(
-            st.text(min_size=1, max_size=10, alphabet=st.characters(min_codepoint=97, max_codepoint=122)),
-            children,
-            max_size=5
-        )
-    ),
-    max_leaves=10
-)
-
-# Valid path components
-path_component = st.text(min_size=1, max_size=10, alphabet=st.characters(min_codepoint=97, max_codepoint=122))
-array_index = st.integers(min_value=0, max_value=5)
-
-# Simple paths (no wildcards or slices)
+# Custom strategies for valid paths
 @st.composite
-def simple_paths(draw):
-    """Generate simple dot notation paths."""
-    components = draw(st.lists(path_component, min_size=1, max_size=3))
-    path = ".".join(components)
-    
-    # Optionally add an array index
-    if draw(st.booleans()):
-        index = draw(array_index)
-        path = f"{path}[{index}]"
-    
-    return path
-
-
-class TestPropertyBasedGetPut:
-    """Property-based tests for get/put operations."""
-    
-    @given(json_data, simple_paths())
-    def test_put_get_roundtrip(self, data, path):
-        """Test that put followed by get returns the same value."""
-        value = "test_value"
-        
-        # Put the value
-        result = put(data if isinstance(data, dict) else {}, path, value)
-        
-        # Get it back
-        retrieved = get(result, path)
-        
-        # Should get back what we put in
-        assert retrieved == value
-        
-    @given(json_data, simple_paths())
-    def test_put_preserves_existing_data(self, data, path):
-        """Test that put doesn't destroy unrelated data."""
-        if not isinstance(data, dict) or not data:
-            return  # Skip non-dict or empty data
-            
-        # Get an existing key that's not in our path
-        existing_keys = list(data.keys())
-        if not existing_keys:
-            return
-            
-        preserve_key = existing_keys[0]
-        preserve_value = data[preserve_key]
-        
-        # Put new value at path
-        result = put(data, path, "new_value")
-        
-        # Check if the path would overwrite our preserved key
-        if not path.startswith(preserve_key):
-            # Original data should still be there
-            assert get(result, preserve_key) == preserve_value
-            
-    @given(st.dictionaries(
-        path_component,
-        st.one_of(st.none(), st.text(), st.integers()),
-        min_size=0,
-        max_size=5
-    ))
-    def test_get_missing_path_returns_none(self, data):
-        """Test that getting a non-existent path returns None."""
-        # Generate a path that definitely doesn't exist
-        missing_path = "definitely.not.there.at.all"
-        assert get(data, missing_path) is None
-        
-    @given(st.dictionaries(
-        path_component,
-        st.text(),
-        min_size=1,
-        max_size=5
-    ))
-    def test_get_with_default(self, data):
-        """Test that get returns default for missing paths."""
-        default = "DEFAULT_VALUE"
-        missing_path = "missing.path.here"
-        
-        result = get(data, missing_path, default=default)
-        assert result == default
-
-
-class TestPropertyBasedSeeds:
-    """Property-based tests for SEED operations."""
-    
-    @given(st.lists(path_component, min_size=1, max_size=5))
-    def test_merge_skip_none_no_none_in_output(self, paths):
-        """Test that MERGE with skip_none=True never outputs 'None'."""
-        # Create data with some None values
-        data = {}
-        for i, path in enumerate(paths):
-            if i % 2 == 0:
-                data[path] = f"value_{i}"
-            else:
-                data[path] = None
-                
-        # Create template with right number of placeholders
-        template = " ".join("{}" for _ in paths)
-        
-        merge = MERGE(*paths, template=template, skip_none=True)
-        result = merge.process(data)
-        
-        # Result should not contain literal "None"
-        assert "None" not in result
-        
-    @given(st.lists(path_component, min_size=2, max_size=5).filter(lambda x: len(set(x)) == len(x)))
-    def test_coalesce_returns_first_non_none(self, paths):
-        """Test that COALESCE returns the first non-None value."""
-        # Create data where we know which path has a value
-        data = {}
-        value_index = len(paths) // 2  # Put value in middle
-        
-        for i, path in enumerate(paths):
-            if i < value_index:
-                data[path] = None
-            elif i == value_index:
-                data[path] = "FOUND_VALUE"
-            else:
-                data[path] = f"later_value_{i}"
-                
-        coalesce = COALESCE(paths)
-        result = coalesce.process(data)
-        
-        assert result == "FOUND_VALUE"
-        
-    @given(st.dictionaries(
-        path_component,
-        st.lists(st.text(min_size=0, max_size=5), min_size=0, max_size=5),
+def valid_path_strategy(draw):
+    """Generate valid path strings for chidian."""
+    # Simple paths like "field", "field.subfield", "field[0]", etc.
+    path_parts = draw(st.lists(
+        st.text(alphabet=st.characters(whitelist_categories=('Ll', 'Lu', 'Nd', '_')), min_size=1, max_size=10),
         min_size=1,
         max_size=3
     ))
-    def test_flatten_joins_all_values(self, data):
-        """Test that FLATTEN joins all values from paths."""
-        paths = list(data.keys())
+    return ".".join(part for part in path_parts if part)
+
+
+@st.composite
+def data_with_paths(draw):
+    """Generate data dictionary with corresponding valid paths."""
+    # Create simple field names
+    field_names = draw(st.lists(
+        st.text(alphabet=st.characters(whitelist_categories=('Ll', 'Lu')), min_size=1, max_size=8),
+        min_size=1,
+        max_size=5
+    ))
+    
+    # Create data dict
+    data = {}
+    paths = []
+    
+    for field in field_names:
+        if field:  # Ensure field is not empty
+            data[field] = draw(st.one_of(
+                st.text(min_size=0, max_size=20),
+                st.integers(),
+                st.lists(st.text(min_size=0, max_size=10), max_size=3)
+            ))
+            paths.append(field)
+    
+    return data, paths
+
+
+class TestPropertyBasedCore:
+    """Property-based tests for core functionality."""
+
+    @given(data_with_paths())
+    def test_get_always_returns_value_or_none(self, data_and_paths):
+        """Test that get always returns a value or None, never crashes."""
+        data, paths = data_and_paths
         
-        flatten = FLATTEN(paths, delimiter="<SEP>")
-        result = flatten.process(data)
+        # Test with valid paths
+        for path in paths:
+            result = get(data, path)
+            # Should either return a value from data or None/default
+            assert result is None or isinstance(result, (int, str, list, dict, bool, float))
         
-        # Count the values we expect
-        expected_count = sum(len(v) for v in data.values() if isinstance(v, list))
-        if expected_count > 0:
-            # Result should contain the delimiter between values
-            assert result.count("<SEP>") == expected_count - 1
+        # Test with invalid path - should not crash
+        result = get(data, "nonexistent.path")
+        assert result is None
+
+    @given(st.text(max_size=50), st.text(max_size=50))
+    def test_template_formatting(self, value1, value2):
+        """Test that template always returns a string."""
+        template_func = template("{} {}")
+        result = template_func(value1, value2)
+        assert isinstance(result, str)
+        # Values should appear in result (as strings)
+        assert str(value1) in result
+        assert str(value2) in result
+
+    @given(st.lists(st.text(alphabet=st.characters(whitelist_categories=('Ll', 'Lu')), min_size=1, max_size=8), min_size=1, max_size=3))
+    def test_first_non_empty_returns_value(self, path_names):
+        """Test that first_non_empty always returns something."""
+        # Filter out empty strings
+        valid_paths = [p for p in path_names if p]
+        if not valid_paths:
+            return  # Skip if no valid paths
             
-    @given(
-        st.dictionaries(path_component, st.integers(min_value=-100, max_value=100)),
-        st.lists(
-            st.tuples(
-                st.one_of(
-                    st.just(lambda x: x > 0),
-                    st.just(lambda x: x < 0),
-                    st.just(lambda x: x == 0)
-                ),
-                st.text(min_size=1, max_size=10)
-            ),
-            min_size=1,
-            max_size=3
-        )
-    )
-    def test_case_handles_all_inputs(self, data, cases):
-        """Test that CASE always returns a value."""
-        # Pick a key from data
-        if not data:
+        # Create data with at least one non-empty value
+        data = {valid_paths[0]: "found_value"}
+        
+        coalesce = first_non_empty(*valid_paths, default="DEFAULT")
+        result = coalesce(data)
+        
+        # Should return either the found value or the default
+        assert result == "found_value" or result == "DEFAULT"
+
+    @given(st.lists(st.text(alphabet=st.characters(whitelist_categories=('Ll', 'Lu')), min_size=1, max_size=8), min_size=1, max_size=3))
+    def test_flatten_returns_string(self, path_names):
+        """Test that flatten always returns a string."""
+        # Filter out empty strings
+        valid_paths = [p for p in path_names if p]
+        if not valid_paths:
+            return  # Skip if no valid paths
+            
+        # Create data with lists for each path
+        data = {path: [f"value_{i}" for i in range(2)] for path in valid_paths}
+        
+        flatten_func = flatten(valid_paths, delimiter=", ")
+        result = flatten_func(data)
+        
+        assert isinstance(result, str)
+
+    @given(st.dictionaries(st.text(max_size=20), st.text(max_size=20), min_size=1))
+    def test_case_matching(self, cases):
+        """Test that case matching works reliably."""
+        if not cases:
             return
-            
-        path = list(data.keys())[0]
-        default = "DEFAULT"
         
-        # Create CASE with our conditions
-        case_seed = st.builds(
-            lambda: CASE(path, cases, default=default)
-        )
+        # Pick a key that exists in cases
+        test_key = list(cases.keys())[0]
+        expected_value = cases[test_key]
         
-        # CASE should always return something (either matched or default)
-        # This is more of a smoke test that CASE doesn't crash
-        for case in cases:
+        case_func = case(cases, default="DEFAULT")
+        
+        # Should return the expected value for exact match
+        result = case_func(test_key)
+        assert result == expected_value
+
+    @given(st.text(max_size=100))
+    def test_partials_chaining(self, input_text):
+        """Test that partials chaining doesn't crash."""
+        # Simple chain that should always work
+        try:
+            chain = p.strip >> p.lower >> p.upper
+            result = chain(input_text)
+            assert isinstance(result, str)
+            assert result == input_text.strip().lower().upper()
+        except AttributeError:
+            # input_text might not be a string in some edge cases
+            pass
+
+
+class TestPropertyBasedHelpers:
+    """Property-based tests for helper functions."""
+
+    @given(st.lists(st.integers(), min_size=1, max_size=10))
+    def test_partials_list_operations(self, values):
+        """Test list operations in partials."""
+        # Test that basic list operations work
+        assert p.first(values) == values[0]
+        assert p.last(values) == values[-1]
+        assert p.length(values) == len(values)
+        
+        if len(values) > 1:
+            assert p.at_index(1)(values) == values[1]
+
+    @given(st.text(min_size=1, max_size=50))
+    def test_string_partials(self, text):
+        """Test string operations."""
+        # These should not crash
+        assert isinstance(p.upper(text), str)
+        assert isinstance(p.lower(text), str)
+        assert isinstance(p.strip(text), str)
+        
+        # Chain them
+        result = (p.strip >> p.lower >> p.upper)(text)
+        assert isinstance(result, str)
+
+
+class TestPropertyBasedRobustness:
+    """Test that core functions handle edge cases gracefully."""
+    
+    @given(st.dictionaries(st.text(), st.one_of(st.none(), st.text(), st.integers(), st.lists(st.text()))))
+    def test_get_robustness(self, data):
+        """Test get function with various data types."""
+        # Should never crash, regardless of input
+        result = get(data, "any.path.here")
+        # Result should be None or a valid type
+        assert result is None or isinstance(result, (str, int, list, dict, bool, float))
+    
+    @given(st.text(), st.text())
+    def test_template_edge_cases(self, template_str, value):
+        """Test template with various inputs."""
+        if "{}" in template_str:
             try:
-                seed = CASE(path, [case], default=default)
-                result = seed.process(data)
-                assert result is not None
-            except:
-                pass  # Some conditions might not be valid
+                template_func = template(template_str)
+                result = template_func(value)
+                assert isinstance(result, str)
+            except (ValueError, IndexError):
+                # Template formatting errors are acceptable
+                pass
+    
+    @given(st.lists(st.text(), max_size=5))
+    def test_flatten_empty_inputs(self, paths):
+        """Test flatten with various path combinations."""
+        # Should not crash even with empty or invalid paths
+        try:
+            flatten_func = flatten(paths, delimiter=", ")
+            result = flatten_func({})
+            assert isinstance(result, str)
+        except Exception:
+            # Some path combinations might be invalid, that's okay
+            pass

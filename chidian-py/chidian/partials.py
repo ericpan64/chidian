@@ -247,3 +247,109 @@ def extract_id() -> ChainableFn:
 def format_string(template: str) -> ChainableFn:
     """Format value into a string template."""
     return ChainableFn(lambda x: template.format(x))
+
+
+# New partials replacing former SEED classes
+def case(cases: dict[Any, Any] | list[tuple[Any, Any]], default: Any = None) -> ChainableFn:
+    """Switch-like pattern matching for values with ordered evaluation.
+    
+    Args:
+        cases: Dictionary or list of (condition, value) tuples
+        default: Default value if no cases match
+    
+    Returns:
+        ChainableFn that applies case matching to input value
+    """
+    def case_matcher(value):
+        # Support both dict and list for ordered evaluation
+        case_items = list(cases.items()) if isinstance(cases, dict) else cases
+        
+        for case_key, case_value in case_items:
+            # Exact match
+            if not callable(case_key) and value == case_key:
+                return case_value
+            
+            # Function match
+            if callable(case_key):
+                try:
+                    if case_key(value):
+                        return case_value
+                except (TypeError, AttributeError):
+                    continue
+        
+        return default
+    
+    return ChainableFn(case_matcher)
+
+
+def first_non_empty(*paths: str, default: Any = None) -> Callable[[Any], Any]:
+    """Grab first non-empty value from multiple paths.
+    
+    Args:
+        *paths: Paths to check in order
+        default: Default value if all paths are empty/None
+    
+    Returns:
+        Function that takes data and returns first non-empty value
+    """
+    def coalesce_func(data):
+        for path in paths:
+            value = _get(data, path)
+            if value is not None and value != "":
+                return value
+        return default
+    
+    return coalesce_func
+
+
+def template(template_str: str, skip_none: bool = False) -> Callable[..., str]:
+    """Combine multiple values using a template string.
+    
+    Args:
+        template_str: Template string with {} placeholders
+        skip_none: If True, skip None values and adjust template
+    
+    Returns:
+        Function that takes values and formats them into template
+    """
+    def template_formatter(*values):
+        if skip_none:
+            # Filter out None values
+            filtered_values = [v for v in values if v is not None]
+            # Create template with correct number of placeholders
+            if filtered_values:
+                adjusted_template = ' '.join('{}' for _ in filtered_values)
+                return adjusted_template.format(*filtered_values)
+            else:
+                return ""
+        else:
+            return template_str.format(*values)
+    
+    return template_formatter
+
+
+def flatten_paths(paths: list[str], delimiter: str = ", ") -> Callable[[Any], str]:
+    """Flatten values from multiple paths into a single delimited string.
+    
+    Args:
+        paths: List of paths to extract values from
+        delimiter: String to join values with
+    
+    Returns:
+        Function that takes data and returns flattened string
+    """
+    def flatten_func(data):
+        all_values = []
+        for path in paths:
+            values = _get(data, path)
+            if isinstance(values, list):
+                all_values.extend(str(v) for v in values if v is not None)
+            elif values is not None:
+                all_values.append(str(values))
+        return delimiter.join(all_values)
+    
+    return flatten_func
+
+
+# Convenience alias for flatten_paths
+flatten = flatten_paths

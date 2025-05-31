@@ -4,8 +4,8 @@ from .recordset import RecordSet
 from .piper import DictPiper, TypedPiper
 from .view import View
 from .lens import Lens
-from .seeds import DROP, KEEP, CASE, COALESCE, SPLIT, MERGE, FLATTEN
-from .partials import FunctionChain, ChainableFn
+from .seeds import DROP, KEEP
+from .partials import FunctionChain, ChainableFn, case, first_non_empty, template, flatten
 
 __all__ = [
     "get",
@@ -17,11 +17,10 @@ __all__ = [
     "TypedPiper",
     "DROP",
     "KEEP",
-    "CASE",
-    "COALESCE",
-    "SPLIT",
-    "MERGE",
-    "FLATTEN",
     "FunctionChain",
     "ChainableFn",
+    "case",
+    "first_non_empty",
+    "template",
+    "flatten",
 ]

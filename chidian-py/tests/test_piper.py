@@ -3,8 +3,9 @@
 from typing import Any
 import pytest
 
-from chidian import get, DictPiper
-from chidian.seeds import DROP, KEEP, CASE, COALESCE, SPLIT, MERGE, FLATTEN
+from chidian import get, DictPiper, template, case, first_non_empty, flatten
+import chidian.partials as p
+from chidian.seeds import DROP, KEEP
 from tests.helpers import (
     patient_mapper, observation_mapper, name_mapper, address_mapper,
     assert_patient, assert_observation, assert_name, assert_address,
@@ -66,15 +67,20 @@ class TestDictPiper:
         }
         
         def mapper(data: dict[str, Any]) -> dict[str, Any]:
+            # Use new partials API
+            name_template = template("{} {}")
+            status_classifier = p.get("status") >> case({
+                "active": "✓ Active",
+                "inactive": "✗ Inactive"
+            }, default="Unknown")
+            city_extractor = p.get("address") >> p.split("|") >> p.at_index(1)
+            
             return {
-                "name": MERGE("firstName", "lastName", template="{} {}").process(data),
-                "status_display": CASE("status", {
-                    "active": "✓ Active",
-                    "inactive": "✗ Inactive"
-                }, default="Unknown").process(data),
-                "all_codes": FLATTEN(["codes"], delimiter=", ").process(data),
-                "city": SPLIT("address", "|", 1).process(data),
-                "backup_name": COALESCE(["nickname", "firstName"], default="Guest").process(data)
+                "name": name_template(get(data, "firstName"), get(data, "lastName")),
+                "status_display": status_classifier(data),
+                "all_codes": flatten(["codes"], delimiter=", ")(data),
+                "city": city_extractor(data),
+                "backup_name": first_non_empty("nickname", "firstName", default="Guest")(data)
             }
             
         piper = DictPiper(mapper)
@@ -143,7 +149,7 @@ class TestDictPiperIntegration:
             return {
                 "id": get(obs, "id"),
                 "type": code_mapper.get(code, "unknown"),
-                "patient": SPLIT("subject.reference", "/", -1).process(obs),
+                "patient": (p.get("subject.reference") >> p.split("/") >> p.last)(obs),
                 "components": [
                     {
                         "code": code_mapper.get(get(comp, "code.coding[0].code"), "unknown"),
