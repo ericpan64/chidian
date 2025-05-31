@@ -27,7 +27,10 @@ target/
 .paic/
 tasks/
 CLAUDE.md
+.claude/
 .aider*
+codebase.md
+.aidigestignore
 
 # SpecStory explanation file
 .specstory/.what-is-this.md
