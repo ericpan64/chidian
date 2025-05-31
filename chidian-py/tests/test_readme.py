@@ -1,8 +1,6 @@
 """Tests based on examples from the README file.
 
-NOTE: These tests are currently expected to fail as the core functions
-(get, put, DictPiper, and seeds) are not yet implemented - they're 
-placeholders with `...` in the source code.
+These tests serve as documentation examples showing common usage patterns.
 """
 
 import pytest
