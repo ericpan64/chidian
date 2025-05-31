@@ -21,4 +21,5 @@ python-source = "."
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
+    "hypothesis>=6.0.0",
 ]

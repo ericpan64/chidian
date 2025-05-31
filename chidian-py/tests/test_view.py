@@ -159,7 +159,7 @@ class TestViewValidation:
 class TestViewRealWorld:
     """Test real-world transformation scenarios."""
     
-    def test_fhir_to_flat_structure(self):
+    def test_fhir_to_flat_structure(self, fhir_observation):
         """Test transforming nested FHIR to flat structure."""
         class FHIRObservation(BaseModel):
             id: str
@@ -186,13 +186,7 @@ class TestViewRealWorld:
             }
         )
         
-        source = FHIRObservation(
-            id='obs-123',
-            subject={'reference': 'Patient/456'},
-            code={'coding': [{'system': 'LOINC', 'code': '8480-6'}]},
-            valueQuantity={'value': 140.0, 'unit': 'mmHg'}
-        )
-        
+        source = FHIRObservation(**fhir_observation)
         result = view.forward(source)
         
         assert result.observation_id == 'obs-123'

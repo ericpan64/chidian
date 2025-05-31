@@ -192,40 +192,8 @@ def test_complex_nested_transformation():
     assert result["blood_pressure"]["unit"] == "mmHg"
 
 
-def test_end_to_end_pipeline():
+def test_end_to_end_pipeline(fhir_bundle):
     """Test complete pipeline: Collection -> Mapper -> Piper -> Put."""
-    
-    # Sample FHIR Bundle with multiple observations
-    fhir_bundle = {
-        "entry": [
-            {
-                "resource": {
-                    "resourceType": "Observation",
-                    "id": "bp-1",
-                    "status": "final",
-                    "subject": {"reference": "Patient/123"},
-                    "code": {"coding": [{"code": "85354-9", "display": "Blood pressure"}]},
-                    "component": [
-                        {"code": {"coding": [{"code": "8480-6"}]}, "valueQuantity": {"value": 120}},
-                        {"code": {"coding": [{"code": "8462-4"}]}, "valueQuantity": {"value": 80}}
-                    ]
-                }
-            },
-            {
-                "resource": {
-                    "resourceType": "Observation", 
-                    "id": "bp-2",
-                    "status": "final",
-                    "subject": {"reference": "Patient/456"},
-                    "code": {"coding": [{"code": "85354-9", "display": "Blood pressure"}]},
-                    "component": [
-                        {"code": {"coding": [{"code": "8480-6"}]}, "valueQuantity": {"value": 140}},
-                        {"code": {"coding": [{"code": "8462-4"}]}, "valueQuantity": {"value": 90}}
-                    ]
-                }
-            }
-        ]
-    }
     
     # Step 1: Extract observations using direct get
     observations = get(fhir_bundle, "entry[*].resource")

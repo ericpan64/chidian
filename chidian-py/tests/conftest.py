@@ -99,3 +99,89 @@ def simple_data() -> dict[str, Any]:
 @pytest.fixture(scope="function")
 def nested_data() -> dict[str, Any]:
     return {"data": _deep_nested_list()}
+
+
+@pytest.fixture(scope="function")
+def fhir_bundle() -> dict[str, Any]:
+    """Sample FHIR Bundle with multiple observations."""
+    return {
+        "entry": [
+            {
+                "resource": {
+                    "resourceType": "Observation",
+                    "id": "bp-1",
+                    "status": "final",
+                    "subject": {"reference": "Patient/123"},
+                    "code": {"coding": [{"code": "85354-9", "display": "Blood pressure"}]},
+                    "component": [
+                        {"code": {"coding": [{"code": "8480-6"}]}, "valueQuantity": {"value": 120}},
+                        {"code": {"coding": [{"code": "8462-4"}]}, "valueQuantity": {"value": 80}}
+                    ]
+                }
+            },
+            {
+                "resource": {
+                    "resourceType": "Observation", 
+                    "id": "bp-2",
+                    "status": "final",
+                    "subject": {"reference": "Patient/456"},
+                    "code": {"coding": [{"code": "85354-9", "display": "Blood pressure"}]},
+                    "component": [
+                        {"code": {"coding": [{"code": "8480-6"}]}, "valueQuantity": {"value": 140}},
+                        {"code": {"coding": [{"code": "8462-4"}]}, "valueQuantity": {"value": 90}}
+                    ]
+                }
+            }
+        ]
+    }
+
+
+@pytest.fixture(scope="function")
+def fhir_observation() -> dict[str, Any]:
+    """Sample FHIR Observation resource."""
+    return {
+        "resourceType": "Observation",
+        "id": "obs-123",
+        "status": "final",
+        "subject": {"reference": "Patient/456"},
+        "code": {"coding": [{"system": "LOINC", "code": "8480-6"}]},
+        "valueQuantity": {"value": 140.0, "unit": "mmHg"}
+    }
+
+
+@pytest.fixture(scope="function")
+def complex_patient_bundle() -> dict[str, Any]:
+    """Complex patient data with multiple providers and observations."""
+    return {
+        "patients": [
+            {
+                "id": "patient-1",
+                "name": [{"given": ["John"], "family": "Doe"}],
+                "providers": [
+                    {
+                        "id": "prov-1", 
+                        "name": "Dr. Smith",
+                        "observations": [
+                            {
+                                "id": "obs-1",
+                                "code": {"coding": [{"code": "8480-6", "display": "Systolic BP"}]},
+                                "value": 140
+                            }
+                        ]
+                    },
+                    {
+                        "id": "prov-2",
+                        "name": "Dr. Jones",
+                        "observations": [
+                            {
+                                "id": "obs-2", 
+                                "code": {"coding": [{"code": "33747-0", "display": "Status"}]},
+                                "value": "Normal",
+                                "status": "final"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
