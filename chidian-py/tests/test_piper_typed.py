@@ -4,7 +4,7 @@ import pytest
 from typing import Optional
 from pydantic import BaseModel
 
-from chidian.typed_piper import TypedPiper
+from chidian.piper import TypedPiper
 from chidian.view import View
 from chidian.lens import Lens
 from chidian.recordset import RecordSet

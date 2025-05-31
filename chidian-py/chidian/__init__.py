@@ -1,10 +1,9 @@
 from .chidian_rs import get
 from .lib import put
 from .recordset import RecordSet
-from .piper import DictPiper
+from .piper import DictPiper, TypedPiper
 from .view import View
 from .lens import Lens
-from .typed_piper import TypedPiper
 from .seeds import DROP, KEEP, CASE, COALESCE, SPLIT, MERGE, FLATTEN
 from .partials import FunctionChain, ChainableFn
 

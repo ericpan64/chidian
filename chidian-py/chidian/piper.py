@@ -1,7 +1,5 @@
 
-from copy import deepcopy
-from typing import Any, Callable
-
+from typing import Any, Callable, TypeVar, Generic, Type, Union, Tuple
 from .seeds import SEED, DROP, KEEP, DropLevel
 
 """
@@ -188,50 +186,6 @@ class DictPiper:
             # Primitive value, return as-is
             return data
     
-    def _apply_drops(self, data: dict[str, Any], drops: list[tuple[str, DropLevel, list[str]]], path: list[str]) -> dict[str, Any]:
-        """Apply DROP operations to a dictionary."""
-        result = deepcopy(data)
-        
-        for key, drop_level, drop_path in drops:
-            if drop_level == DropLevel.THIS_OBJECT:
-                # DROP.THIS_OBJECT should drop the entire current dict - signal to parent
-                return DROP(DropLevel.THIS_OBJECT)
-            elif drop_level == DropLevel.PARENT:
-                # Should drop the parent of current dict - signal to grandparent
-                return DROP(DropLevel.PARENT)
-            elif drop_level == DropLevel.GRANDPARENT:
-                # Signal to great-grandparent
-                return DROP(DropLevel.GRANDPARENT)
-            elif drop_level == DropLevel.GREATGRANDPARENT:
-                # Check bounds - can't drop beyond root
-                if len(path) < 3:  # Need at least 3 levels to drop greatgrandparent
-                    raise RuntimeError("Cannot drop GREATGRANDPARENT: not enough parent levels")
-                return DROP(DropLevel.GREATGRANDPARENT)
-        
-        return result
-    
-    def _apply_list_drops(self, data: list[Any], drops: list[tuple[int, DropLevel, list[str]]], path: list[str]) -> list[Any]:
-        """Apply DROP operations to a list."""
-        if not drops:
-            return data
-        
-        for index, drop_level, drop_path in drops:
-            if drop_level == DropLevel.THIS_OBJECT:
-                # DROP.THIS_OBJECT should drop the entire current list - signal to parent
-                return DROP(DropLevel.THIS_OBJECT)
-            elif drop_level == DropLevel.PARENT:
-                # Should drop the parent of current list - signal to grandparent
-                return DROP(DropLevel.PARENT)
-            elif drop_level == DropLevel.GRANDPARENT:
-                # Signal to great-grandparent
-                return DROP(DropLevel.GRANDPARENT)
-            elif drop_level == DropLevel.GREATGRANDPARENT:
-                # Check bounds - can't drop beyond root
-                if len(path) < 3:  # Need at least 3 levels to drop greatgrandparent
-                    raise RuntimeError("Cannot drop GREATGRANDPARENT: not enough parent levels")
-                return DROP(DropLevel.GREATGRANDPARENT)
-        
-        return data
     
     def _remove_empty_containers(self, data: Any) -> Any:
         """Remove empty lists and dictionaries recursively."""
@@ -253,3 +207,66 @@ class DictPiper:
             return result
         else:
             return data
+
+
+# Type variables for TypedPiper
+InputT = TypeVar('InputT')
+OutputT = TypeVar('OutputT')
+
+
+class TypedPiper(Generic[InputT, OutputT]):
+    """Type-safe data transformation pipeline."""
+    
+    def __init__(self, transformer: Union['View', 'Lens', Callable[[InputT], OutputT]]):
+        # Import here to avoid circular imports
+        from .view import View
+        from .lens import Lens
+        
+        self.transformer = transformer
+        
+        # Determine mode and inherit settings from transformer
+        if isinstance(transformer, (View, Lens)):
+            self.input_type = transformer.source_model
+            self.output_type = transformer.target_model
+            self.strict = transformer.strict
+            self._mode = "lens" if isinstance(transformer, Lens) else "view"
+        else:
+            # Generic callable - minimal type safety
+            self.input_type = None
+            self.output_type = None
+            self.strict = False
+            self._mode = "callable"
+    
+    def forward(self, input_data: InputT) -> Union[OutputT, Tuple[OutputT, 'RecordSet']]:
+        """Apply forward transformation."""
+        # Import here to avoid circular imports
+        from .recordset import RecordSet
+        
+        # Type validation for strict mode
+        if self.strict and self.input_type and not isinstance(input_data, self.input_type):
+            raise TypeError(f"Expected {self.input_type.__name__}, got {type(input_data).__name__}")
+        
+        # Apply transformation
+        if self._mode == "lens":
+            return self.transformer.forward(input_data)
+        elif self._mode == "view":
+            return self.transformer.forward(input_data)
+        else:
+            return self.transformer(input_data)
+    
+    def reverse(self, output_data: OutputT, spillover: 'RecordSet' = None) -> InputT:
+        """Apply reverse transformation (only available for Lens)."""
+        if self._mode != "lens":
+            raise ValueError("Reverse transformation only available for Lens")
+        
+        # Import here to avoid circular imports
+        from .recordset import RecordSet
+        return self.transformer.reverse(output_data, spillover or RecordSet())
+    
+    def can_reverse(self) -> bool:
+        """Check if this piper supports reverse transformation."""
+        return self._mode == "lens" and self.transformer.can_reverse()
+    
+    def __call__(self, input_data: InputT) -> Union[OutputT, Tuple[OutputT, 'RecordSet']]:
+        """Allow TypedPiper to be called directly."""
+        return self.forward(input_data)
