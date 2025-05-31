@@ -17,7 +17,7 @@ MappingFunc: TypeAlias = Callable[..., dict[str, Any]]
 class SEED(ABC):
     """Base class for all SEED objects.
     
-    SEEDs are special objects that modify data processing behavior in DictPiper.
+    SEEDs are special objects that modify data processing behavior in Piper.
     They can be consumed during mapping execution to perform transformations,
     conditionals, or structural modifications.
     """
@@ -88,7 +88,7 @@ class DROP(SEED):
         self.level = level
     
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
-        """DROP seeds are processed by DictPiper, not directly."""
+        """DROP seeds are processed by Piper, not directly."""
         return self
     
     @classmethod

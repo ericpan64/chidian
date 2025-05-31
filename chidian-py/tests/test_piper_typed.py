@@ -1,10 +1,10 @@
-"""Tests for TypedPiper with View and Lens integration."""
+"""Tests for Piper with View and Lens integration."""
 
 import pytest
 from typing import Optional
 from pydantic import BaseModel
 
-from chidian.piper import TypedPiper
+from chidian.piper import Piper
 from chidian.view import View
 from chidian.lens import Lens
 from chidian.recordset import RecordSet
@@ -25,16 +25,16 @@ class Observation(BaseModel):
     status: Optional[str] = None
 
 
-class TestTypedPiperView:
-    """Test TypedPiper with View (unidirectional)."""
+class TestPiperView:
+    """Test Piper with View (unidirectional)."""
     
     def test_typed_piper_view_creation(self):
-        """Test TypedPiper can be created with View."""
+        """Test Piper can be created with View."""
         view = View(Patient, Observation, {
             "subject_ref": "id",  # View expects target_field: source_field
             "performer": "name"
         }, strict=False)  # Use non-strict mode to avoid validation errors
-        piper = TypedPiper(view)
+        piper = Piper(view)
         
         assert piper.input_type == Patient
         assert piper.output_type == Observation
@@ -47,7 +47,7 @@ class TestTypedPiperView:
             "subject_ref": "id",  # View expects target_field: source_field
             "performer": "name"
         }, strict=False)
-        piper = TypedPiper(view)
+        piper = Piper(view)
         
         patient = Patient(id="123", name="John", active=True, age=45)
         obs = piper.forward(patient)
@@ -62,12 +62,12 @@ class TestTypedPiperView:
             assert obs.performer == "John"
     
     def test_typed_piper_view_call_syntax(self):
-        """Test TypedPiper can be called directly."""
+        """Test Piper can be called directly."""
         view = View(Patient, Observation, {
             "subject_ref": "id",
             "performer": "name"
         }, strict=False)
-        piper = TypedPiper(view)
+        piper = Piper(view)
         
         patient = Patient(id="123", name="John", active=True)
         obs = piper(patient)  # Should work same as forward()
@@ -81,12 +81,12 @@ class TestTypedPiperView:
             assert obs.performer == "John"
     
     def test_typed_piper_view_reverse_fails(self):
-        """Test that View-based TypedPiper cannot reverse."""
+        """Test that View-based Piper cannot reverse."""
         view = View(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
         }, strict=False)
-        piper = TypedPiper(view)
+        piper = Piper(view)
         
         obs = Observation(subject_ref="123", performer="John")
         
@@ -99,7 +99,7 @@ class TestTypedPiperView:
             "subject_ref": "id",
             "performer": "name"
         }, strict=False)
-        piper = TypedPiper(view)
+        piper = Piper(view)
         
         # Correct type should work
         patient = Patient(id="123", name="John", active=True)
@@ -116,22 +116,22 @@ class TestTypedPiperView:
             "id": "subject_ref",
             "name": "performer"
         }, strict=False)
-        piper = TypedPiper(view)
+        piper = Piper(view)
         
-        assert isinstance(piper, TypedPiper)
+        assert isinstance(piper, Piper)
         assert piper._mode == "view"
 
 
-class TestTypedPiperLens:
-    """Test TypedPiper with Lens (bidirectional)."""
+class TestPiperLens:
+    """Test Piper with Lens (bidirectional)."""
     
     def test_typed_piper_lens_creation(self):
-        """Test TypedPiper can be created with Lens."""
+        """Test Piper can be created with Lens."""
         lens = Lens(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
         })
-        piper = TypedPiper(lens)
+        piper = Piper(lens)
         
         assert piper.input_type == Patient
         assert piper.output_type == Observation
@@ -144,7 +144,7 @@ class TestTypedPiperLens:
             "id": "subject_ref",
             "name": "performer"
         })
-        piper = TypedPiper(lens)
+        piper = Piper(lens)
         
         patient = Patient(id="123", name="John", active=True, age=45)
         obs, spillover = piper.forward(patient)
@@ -164,7 +164,7 @@ class TestTypedPiperLens:
             "id": "subject_ref",
             "name": "performer"
         })
-        piper = TypedPiper(lens)
+        piper = Piper(lens)
         
         obs = Observation(subject_ref="123", performer="John")
         spillover = RecordSet([{"active": True, "age": 45}])
@@ -183,7 +183,7 @@ class TestTypedPiperLens:
             "id": "subject_ref",
             "name": "performer"
         })
-        piper = TypedPiper(lens)
+        piper = Piper(lens)
         
         original = Patient(id="123", name="John", active=True, age=45)
         
@@ -196,12 +196,12 @@ class TestTypedPiperLens:
         assert recovered == original
     
     def test_typed_piper_lens_call_syntax(self):
-        """Test TypedPiper with Lens can be called directly."""
+        """Test Piper with Lens can be called directly."""
         lens = Lens(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
         })
-        piper = TypedPiper(lens)
+        piper = Piper(lens)
         
         patient = Patient(id="123", name="John", active=True)
         obs, spillover = piper(patient)  # Should work same as forward()
@@ -215,81 +215,61 @@ class TestTypedPiperLens:
             "id": "subject_ref",
             "name": "performer"
         })
-        piper = TypedPiper(lens)
+        piper = Piper(lens)
         
-        assert isinstance(piper, TypedPiper)
+        assert isinstance(piper, Piper)
         assert piper._mode == "lens"
         assert piper.can_reverse() is True
 
 
-class TestTypedPiperCallable:
-    """Test TypedPiper with generic callable."""
+class TestPiperErrorHandling:
+    """Test Piper error handling for unsupported modes."""
     
-    def test_typed_piper_callable_creation(self):
-        """Test TypedPiper can be created with generic callable."""
+    def test_callable_without_dict_types_fails(self):
+        """Test that Piper rejects callables without dict types."""
         def mapper(patient: Patient) -> Observation:
             return Observation(
                 subject_ref=patient.id,
                 performer=patient.name
             )
         
-        piper = TypedPiper(mapper)
-        
-        assert piper.input_type is None  # No type inference for callables
-        assert piper.output_type is None
-        assert piper._mode == "callable"
-        assert piper.can_reverse() is False
+        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or View/Lens objects"):
+            Piper(mapper)
     
-    def test_typed_piper_callable_forward(self):
-        """Test forward transformation with callable."""
-        def mapper(patient: Patient) -> Observation:
-            return Observation(
-                subject_ref=patient.id,
-                performer=patient.name
-            )
+    def test_callable_with_wrong_types_fails(self):
+        """Test that Piper rejects callables with non-dict types."""
+        def mapper(x: int) -> str:
+            return str(x)
         
-        piper = TypedPiper(mapper)
-        
-        patient = Patient(id="123", name="John", active=True)
-        obs = piper.forward(patient)
-        
-        assert isinstance(obs, Observation)
-        assert obs.subject_ref == "123"
-        assert obs.performer == "John"
+        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or View/Lens objects"):
+            Piper(mapper, source_type=int, target_type=str)
     
-    def test_typed_piper_callable_reverse_fails(self):
-        """Test that callable-based TypedPiper cannot reverse."""
-        def mapper(patient: Patient) -> Observation:
-            return Observation(subject_ref=patient.id, performer=patient.name)
-        
-        piper = TypedPiper(mapper)
-        
-        obs = Observation(subject_ref="123", performer="John")
-        
-        with pytest.raises(ValueError, match="Reverse transformation only available for Lens"):
-            piper.reverse(obs)
+    def test_dict_mode_requires_callable(self):
+        """Test that dict mode requires a callable transformer."""
+        with pytest.raises(TypeError, match="Transformer must be callable for dict mode"):
+            Piper("not a function", source_type=dict, target_type=dict)
 
 
-class TestTypedPiperStrictMode:
-    """Test TypedPiper strict mode behavior."""
+class TestPiperStrictMode:
+    """Test Piper strict mode behavior."""
     
-    def test_callable_no_type_info(self):
-        """Test that callable mode has no type requirements."""
-        def mapper(x):
-            return x
+    def test_dict_mode_type_info(self):
+        """Test that dict mode has dict type requirements."""
+        def mapper(data: dict) -> dict:
+            return {"result": data.get("value")}
         
-        piper = TypedPiper(mapper)
-        assert piper.input_type is None
-        assert piper.output_type is None
+        piper = Piper(mapper, source_type=dict, target_type=dict)
+        assert piper.input_type is dict
+        assert piper.output_type is dict
         assert piper.strict is False
     
     def test_lens_inherits_strict_mode(self):
-        """Test that TypedPiper inherits strict mode from lens."""
+        """Test that Piper inherits strict mode from lens."""
         lens_strict = Lens(Patient, Observation, {"id": "subject_ref", "name": "performer"}, strict=True)
         lens_nonstrict = Lens(Patient, Observation, {"id": "subject_ref", "name": "performer"}, strict=False)
         
-        piper_strict = TypedPiper(lens_strict)
-        piper_nonstrict = TypedPiper(lens_nonstrict)
+        piper_strict = Piper(lens_strict)
+        piper_nonstrict = Piper(lens_nonstrict)
         
         assert piper_strict.strict is True
         assert piper_nonstrict.strict is False
@@ -300,7 +280,7 @@ class TestTypedPiperStrictMode:
             "id": "subject_ref", 
             "name": "performer"
         }, strict=True)
-        piper = TypedPiper(lens)
+        piper = Piper(lens)
         
         # Correct type works
         patient = Patient(id="123", name="John", active=True)
@@ -312,14 +292,14 @@ class TestTypedPiperStrictMode:
             piper.forward("not a patient")
 
 
-class TestTypedPiperIntegration:
-    """Test TypedPiper integration scenarios."""
+class TestPiperIntegration:
+    """Test Piper integration scenarios."""
     
     def test_type_safety_prevents_chaining_errors(self):
         """Test that type safety prevents incompatible chaining."""
         # Create two pipers with incompatible types
         view1 = View(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False)
-        piper1 = TypedPiper(view1)
+        piper1 = Piper(view1)
         
         # This would be a type error if we tried to chain with a different input type
         # (In real usage, mypy/type checker would catch this)
@@ -330,11 +310,11 @@ class TestTypedPiperIntegration:
         """Test workflow mixing View and Lens based pipers."""
         # Step 1: Use View for one-way transformation
         view = View(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False)
-        view_piper = TypedPiper(view)
+        view_piper = Piper(view)
         
         # Step 2: Use Lens for bidirectional transformation
         lens = Lens(Patient, Observation, {"id": "subject_ref", "name": "performer"})
-        lens_piper = TypedPiper(lens)
+        lens_piper = Piper(lens)
         
         patient = Patient(id="123", name="John", active=True, age=45)
         

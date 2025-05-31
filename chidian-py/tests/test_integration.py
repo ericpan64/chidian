@@ -3,7 +3,7 @@
 import pytest
 from typing import Any
 
-from chidian import get, DictPiper
+from chidian import get, Piper
 import chidian.partials as p
 from chidian.lib import put
 from chidian.seeds import DROP, KEEP
@@ -45,7 +45,7 @@ def test_put_function_basic():
 
 
 def test_dict_piper_basic():
-    """Test basic DictPiper functionality."""
+    """Test basic Piper functionality for dict transformations."""
     def simple_mapper(data: dict[str, Any]) -> dict[str, Any]:
         return {
             "id": get(data, "patient.id"),
@@ -53,7 +53,7 @@ def test_dict_piper_basic():
             "active": get(data, "patient.active", default=True)
         }
     
-    piper = DictPiper(simple_mapper)
+    piper = Piper(simple_mapper, source_type=dict, target_type=dict)
     
     data = {"patient": {"id": "123", "name": "John Doe"}}
     result = piper(data)
@@ -64,7 +64,7 @@ def test_dict_piper_basic():
 
 
 def test_partials_integration():
-    """Test partials integration with DictPiper."""
+    """Test partials integration with Piper."""
     def mapper_with_partials(data: dict[str, Any]) -> dict[str, Any]:
         # Use partials for data extraction and transformation
         extract_email_domain = p.get("contact.email") >> p.split("@") >> p.last
@@ -76,7 +76,7 @@ def test_partials_integration():
             "email_domain": extract_email_domain(data)
         }
     
-    piper = DictPiper(mapper_with_partials)
+    piper = Piper(mapper_with_partials, source_type=dict, target_type=dict)
     
     data = {
         "id": "123",
@@ -100,11 +100,11 @@ def test_drop_keep_basic():
             "drop_this": DROP.this_object() if get(data, "should_drop") else get(data, "value")
         }
     
-    piper = DictPiper(mapper_with_seeds)
+    piper = Piper(mapper_with_seeds, source_type=dict, target_type=dict)
     
     # Test with normal data
     data = {"value": "test", "should_drop": False}
     result = piper(data)
     
     assert result["process_this"] == "test"
-    # KEEP and DROP behavior would be tested in DictPiper implementation
+    # KEEP and DROP behavior would be tested in Piper implementation

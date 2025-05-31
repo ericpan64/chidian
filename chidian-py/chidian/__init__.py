@@ -1,7 +1,7 @@
 from .chidian_rs import get
 from .lib import put
 from .recordset import RecordSet
-from .piper import DictPiper, TypedPiper
+from .piper import Piper
 from .view import View
 from .lens import Lens
 from .seeds import DROP, KEEP
@@ -11,10 +11,9 @@ __all__ = [
     "get",
     "put", 
     "RecordSet",
-    "DictPiper",
+    "Piper",
     "View",
     "Lens",
-    "TypedPiper",
     "DROP",
     "KEEP",
     "FunctionChain",

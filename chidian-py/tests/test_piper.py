@@ -1,9 +1,9 @@
-"""Comprehensive tests for DictPiper mapping scenarios."""
+"""Comprehensive tests for Piper mapping scenarios."""
 
 from typing import Any
 import pytest
 
-from chidian import get, DictPiper, template, case, first_non_empty, flatten
+from chidian import get, Piper, template, case, first_non_empty, flatten
 import chidian.partials as p
 from chidian.seeds import DROP, KEEP
 from tests.helpers import (
@@ -13,8 +13,8 @@ from tests.helpers import (
 )
 
 
-class TestDictPiper:
-    """Test DictPiper functionality."""
+class TestPiper:
+    """Test Piper functionality for dict-to-dict transformations."""
     
     @pytest.mark.parametrize("mapper,input_data,assert_fn", [
         (patient_mapper, {"patient": {"id": "123", "name": "John", "active": True}}, assert_patient),
@@ -34,12 +34,12 @@ class TestDictPiper:
     ])
     def test_mapper_variants(self, mapper, input_data, assert_fn):
         """Test various mapper functions with parameterized inputs."""
-        piper = DictPiper(mapper)
+        piper = Piper(mapper, source_type=dict, target_type=dict)
         result = piper(input_data)
         assert_fn(result)
         
     def test_simple_mapping(self, simple_data: dict[str, Any]):
-        """Test basic DictPiper functionality."""
+        """Test basic Piper functionality for dict transformations."""
         def mapping(data: dict[str, Any]) -> dict[str, Any]:
             return {
                 "patient_id": get(data, "data.patient.id"),
@@ -47,7 +47,7 @@ class TestDictPiper:
                 "status": "processed"
             }
         
-        piper = DictPiper(mapping)
+        piper = Piper(mapping, source_type=dict, target_type=dict)
         result = piper(simple_data)
         
         assert result == {
@@ -57,7 +57,7 @@ class TestDictPiper:
         }
         
     def test_seed_operations(self):
-        """Test DictPiper with various SEED operations."""
+        """Test Piper with various SEED operations."""
         data = {
             "firstName": "John",
             "lastName": "Doe", 
@@ -83,7 +83,7 @@ class TestDictPiper:
                 "backup_name": first_non_empty("nickname", "firstName", default="Guest")(data)
             }
             
-        piper = DictPiper(mapper)
+        piper = Piper(mapper, source_type=dict, target_type=dict)
         result = piper(data)
         
         assert result["name"] == "John Doe"
@@ -93,8 +93,8 @@ class TestDictPiper:
         assert result["backup_name"] == "John"
 
 
-class TestDictPiperConditional:
-    """Test conditional logic in DictPiper."""
+class TestPiperConditional:
+    """Test conditional logic in Piper."""
     
     def test_drop_conditions(self):
         """Test DROP seed with conditions."""
@@ -115,7 +115,7 @@ class TestDictPiperConditional:
                 
             return {"id": item["id"], "value": item["value"]}
         
-        results = [DictPiper(mapper)(item) for item in data_list]
+        results = [Piper(mapper, source_type=dict, target_type=dict)(item) for item in data_list]
         # Filter out DROP results
         results = [r for r in results if not isinstance(r, DROP)]
         
@@ -131,14 +131,14 @@ class TestDictPiperConditional:
                 return {"value": KEEP(data["value"]).value}
             return {"value": "default"}
             
-        piper = DictPiper(mapper)
+        piper = Piper(mapper, source_type=dict, target_type=dict)
         result = piper(data)
         
         assert result["value"] == "preserve_me"
 
 
-class TestDictPiperIntegration:
-    """Test DictPiper with complex integrations."""
+class TestPiperIntegration:
+    """Test Piper with complex integrations."""
     
     def test_nested_transformation(self, fhir_bundle):
         """Test transforming nested FHIR bundle."""
@@ -161,7 +161,7 @@ class TestDictPiperIntegration:
         
         # Transform all observations
         observations = get(fhir_bundle, "entry[*].resource")
-        results = [DictPiper(observation_transform)(obs) for obs in observations]
+        results = [Piper(observation_transform, source_type=dict, target_type=dict)(obs) for obs in observations]
         
         assert len(results) == 2
         assert results[0]["type"] == "blood_pressure"
