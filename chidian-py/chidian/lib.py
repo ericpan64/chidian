@@ -79,7 +79,24 @@ def put(target: Union[dict[str, Any], None], path: str, value: Any, strict: bool
                 if strict:
                     raise ValueError(f"Cannot traverse into non-dict at '{key}'")
                 else:
-                    return target
+                    # Replace with appropriate container type
+                    next_segment = segments[i + 1]
+                    if next_segment["type"] == "index":
+                        current[key] = []
+                    else:
+                        current[key] = {}
+            elif isinstance(current[key], dict) and segments[i + 1]["type"] == "index":
+                # Have dict but need list - convert in non-strict mode
+                if strict:
+                    raise ValueError(f"Cannot index into dict at '{key}' - expected list")
+                else:
+                    current[key] = []
+            elif isinstance(current[key], list) and segments[i + 1]["type"] == "key":
+                # Have list but need dict - convert in non-strict mode
+                if strict:
+                    raise ValueError(f"Cannot access key in list at '{key}' - expected dict")
+                else:
+                    current[key] = {}
             
             current = current[key]
             
@@ -91,6 +108,8 @@ def put(target: Union[dict[str, Any], None], path: str, value: Any, strict: bool
                 if strict:
                     raise ValueError(f"Cannot index into non-list")
                 else:
+                    # This shouldn't happen if the logic above is correct
+                    # but handle it gracefully
                     return target
             
             # Expand list if necessary

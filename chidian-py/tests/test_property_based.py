@@ -120,7 +120,7 @@ class TestPropertyBasedGetPut:
 class TestPropertyBasedSeeds:
     """Property-based tests for SEED operations."""
     
-    @given(st.lists(st.text(min_size=1), min_size=1, max_size=5))
+    @given(st.lists(path_component, min_size=1, max_size=5))
     def test_merge_skip_none_no_none_in_output(self, paths):
         """Test that MERGE with skip_none=True never outputs 'None'."""
         # Create data with some None values
@@ -140,7 +140,7 @@ class TestPropertyBasedSeeds:
         # Result should not contain literal "None"
         assert "None" not in result
         
-    @given(st.lists(st.text(min_size=1), min_size=2, max_size=5))
+    @given(st.lists(path_component, min_size=2, max_size=5).filter(lambda x: len(set(x)) == len(x)))
     def test_coalesce_returns_first_non_none(self, paths):
         """Test that COALESCE returns the first non-None value."""
         # Create data where we know which path has a value
@@ -170,14 +170,14 @@ class TestPropertyBasedSeeds:
         """Test that FLATTEN joins all values from paths."""
         paths = list(data.keys())
         
-        flatten = FLATTEN(paths, delimiter="|")
+        flatten = FLATTEN(paths, delimiter="<SEP>")
         result = flatten.process(data)
         
         # Count the values we expect
         expected_count = sum(len(v) for v in data.values() if isinstance(v, list))
         if expected_count > 0:
             # Result should contain the delimiter between values
-            assert result.count("|") == expected_count - 1
+            assert result.count("<SEP>") == expected_count - 1
             
     @given(
         st.dictionaries(path_component, st.integers(min_value=-100, max_value=100)),

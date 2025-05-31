@@ -31,8 +31,8 @@ class TestTypedPiperView:
     def test_typed_piper_view_creation(self):
         """Test TypedPiper can be created with View."""
         view = View(Patient, Observation, {
-            "id": "subject_ref",
-            "name": "performer"
+            "subject_ref": "id",  # View expects target_field: source_field
+            "performer": "name"
         }, strict=False)  # Use non-strict mode to avoid validation errors
         piper = TypedPiper(view)
         
@@ -44,8 +44,8 @@ class TestTypedPiperView:
     def test_typed_piper_view_forward(self):
         """Test forward transformation with View."""
         view = View(Patient, Observation, {
-            "id": "subject_ref",
-            "name": "performer"
+            "subject_ref": "id",  # View expects target_field: source_field
+            "performer": "name"
         }, strict=False)
         piper = TypedPiper(view)
         
@@ -64,8 +64,8 @@ class TestTypedPiperView:
     def test_typed_piper_view_call_syntax(self):
         """Test TypedPiper can be called directly."""
         view = View(Patient, Observation, {
-            "id": "subject_ref",
-            "name": "performer"
+            "subject_ref": "id",
+            "performer": "name"
         }, strict=False)
         piper = TypedPiper(view)
         
@@ -96,8 +96,8 @@ class TestTypedPiperView:
     def test_typed_piper_view_type_validation(self):
         """Test type validation."""
         view = View(Patient, Observation, {
-            "id": "subject_ref",
-            "name": "performer"
+            "subject_ref": "id",
+            "performer": "name"
         }, strict=False)
         piper = TypedPiper(view)
         
@@ -318,7 +318,7 @@ class TestTypedPiperIntegration:
     def test_type_safety_prevents_chaining_errors(self):
         """Test that type safety prevents incompatible chaining."""
         # Create two pipers with incompatible types
-        view1 = View(Patient, Observation, {"id": "subject_ref", "name": "performer"}, strict=False)
+        view1 = View(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False)
         piper1 = TypedPiper(view1)
         
         # This would be a type error if we tried to chain with a different input type
@@ -329,7 +329,7 @@ class TestTypedPiperIntegration:
     def test_mixed_mode_workflow(self):
         """Test workflow mixing View and Lens based pipers."""
         # Step 1: Use View for one-way transformation
-        view = View(Patient, Observation, {"id": "subject_ref", "name": "performer"}, strict=False)
+        view = View(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False)
         view_piper = TypedPiper(view)
         
         # Step 2: Use Lens for bidirectional transformation

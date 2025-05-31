@@ -26,7 +26,7 @@ class DictPiper:
         
         # Handle case where entire structure is dropped
         if isinstance(processed_data, DROP):
-            return {}  # Return empty dict if entire structure is dropped
+            return processed_data  # Return DROP object to allow filtering
         
         # Optional: Remove empty containers
         if self.remove_empty:
