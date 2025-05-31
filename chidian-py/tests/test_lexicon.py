@@ -1,12 +1,12 @@
 import pytest
 from typing import Optional
-from chidian.mapper import StringMapper, Mapper
+from chidian.lexicon import Lexicon
 
 
-def test_basic_string_mapper():
+def test_basic_string_lexicon():
     """Test basic one-to-one string mapping."""
     # Simple LOINC to SNOMED mapping
-    mapper = StringMapper({
+    mapper = Lexicon({
         '8480-6': '271649006',  # Systolic BP
         '8462-4': '271650006',  # Diastolic BP
         '2160-0': '166830008',  # Creatinine
@@ -32,29 +32,29 @@ def test_basic_string_mapper():
 def test_many_to_one_mapping():
     """Test many-to-one mappings with default selection."""
     # Multiple status codes mapping to single value
-    status_mapper = StringMapper({
+    status_lexicon = Lexicon({
         ('active', 'current', 'ongoing'): 'A',
         ('inactive', 'stopped', 'completed'): 'I',
         ('pending', 'planned'): 'P',
     })
     
     # Forward mappings - all map to same value
-    assert status_mapper['active'] == 'A'
-    assert status_mapper['current'] == 'A'
-    assert status_mapper['ongoing'] == 'A'
+    assert status_lexicon['active'] == 'A'
+    assert status_lexicon['current'] == 'A'
+    assert status_lexicon['ongoing'] == 'A'
     
     # Reverse mapping - returns first element by default
-    assert status_mapper['A'] == 'active'  # First in tuple
-    assert status_mapper['I'] == 'inactive'
-    assert status_mapper['P'] == 'pending'
+    assert status_lexicon['A'] == 'active'  # First in tuple
+    assert status_lexicon['I'] == 'inactive'
+    assert status_lexicon['P'] == 'pending'
     
     # Test that unknown keys work with get
-    assert status_mapper.get('unknown', 'DEFAULT') == 'DEFAULT'
+    assert status_lexicon.get('unknown', 'DEFAULT') == 'DEFAULT'
 
 
 def test_default_values():
     """Test default value handling."""
-    mapper = StringMapper(
+    mapper = Lexicon(
         {'yes': 'Y', 'no': 'N'},
         default='UNKNOWN'
     )
@@ -74,7 +74,7 @@ def test_default_values():
 
 def test_metadata():
     """Test metadata storage."""
-    mapper = StringMapper(
+    mapper = Lexicon(
         {'401.9': 'I10'},
         metadata={
             'version': 'ICD9-to-ICD10-2023',
@@ -89,7 +89,7 @@ def test_metadata():
 
 def test_contains_and_len():
     """Test container protocol methods."""
-    mapper = StringMapper({
+    mapper = Lexicon({
         'a': '1',
         'b': '2',
         ('c', 'd'): '3'
@@ -110,7 +110,7 @@ def test_contains_and_len():
 def test_mixed_mappings():
     """Test mixing one-to-one and many-to-one mappings."""
     # Mix of direct and grouped mappings
-    mapper = StringMapper({
+    mapper = Lexicon({
         'red': 'R',
         'blue': 'B',
         ('green', 'emerald', 'jade'): 'G',
@@ -131,9 +131,9 @@ def test_mixed_mappings():
     assert mapper['O'] == 'orange'  # First element
 
 
-def test_empty_mapper():
+def test_empty_lexicon():
     """Test empty mapper behavior."""
-    mapper = StringMapper({})
+    mapper = Lexicon({})
     
     assert len(mapper) == 0
     assert mapper.forward('anything') is None
@@ -144,8 +144,8 @@ def test_empty_mapper():
 
 
 def test_dict_interface():
-    """Test that StringMapper works as a dict."""
-    mapper = StringMapper({'a': '1', 'b': '2'})
+    """Test that Lexicon works as a dict."""
+    mapper = Lexicon({'a': '1', 'b': '2'})
     
     # Dict methods should work
     assert list(mapper.keys()) == ['a', 'b']
@@ -156,30 +156,11 @@ def test_dict_interface():
     assert dict(mapper) == {'a': '1', 'b': '2'}
 
 
-def test_string_mapper_protocol():
-    """Test that StringMapper implements the Mapper protocol."""
-    # StringMapper implements Mapper protocol
-    string_mapper = StringMapper({'a': '1'})
-    assert isinstance(string_mapper, Mapper)
-    assert hasattr(string_mapper, 'forward')
-    assert hasattr(string_mapper, 'metadata')
-    
-    # Check protocol methods work
-    assert string_mapper.forward('a') == '1'
-    assert isinstance(string_mapper.metadata, dict)
-    
-    # StringMapper has additional methods beyond the protocol
-    assert hasattr(string_mapper, 'reverse')
-    assert hasattr(string_mapper, 'can_reverse')
-    assert string_mapper.reverse('1') == 'a'
-    assert string_mapper.can_reverse() is True
-
-
-def test_string_mapper_real_world():
-    """Test StringMapper with realistic healthcare code mappings."""
+def test_string_lexicon_real_world():
+    """Test Lexicon with realistic healthcare code mappings."""
     
     # LOINC to SNOMED CT mapping for common lab tests
-    lab_mapper = StringMapper({
+    lab_lexicon = Lexicon({
         # Blood pressure codes
         '8480-6': '271649006',  # Systolic blood pressure
         '8462-4': '271650006',  # Diastolic blood pressure
@@ -200,28 +181,28 @@ def test_string_mapper_real_world():
     })
     
     # Test forward mappings
-    assert lab_mapper.forward('8480-6') == '271649006'
-    assert lab_mapper.forward('2160-0') == '113075003'  # Many-to-one
-    assert lab_mapper.forward('38483-4') == '113075003'  # Many-to-one
+    assert lab_lexicon.forward('8480-6') == '271649006'
+    assert lab_lexicon.forward('2160-0') == '113075003'  # Many-to-one
+    assert lab_lexicon.forward('38483-4') == '113075003'  # Many-to-one
     
     # Test reverse mappings
-    assert lab_mapper.reverse('271649006') == '8480-6'
-    assert lab_mapper.reverse('113075003') == '2160-0'  # First in tuple
+    assert lab_lexicon.reverse('271649006') == '8480-6'
+    assert lab_lexicon.reverse('113075003') == '2160-0'  # First in tuple
     
     # Test bidirectional access
-    assert lab_mapper['2093-3'] == '166830008'
-    assert lab_mapper['166830008'] == '2093-3'
+    assert lab_lexicon['2093-3'] == '166830008'
+    assert lab_lexicon['166830008'] == '2093-3'
     
     # Test metadata
-    assert lab_mapper.metadata['version'] == '2023-Q4'
-    assert lab_mapper.can_reverse() is True
+    assert lab_lexicon.metadata['version'] == '2023-Q4'
+    assert lab_lexicon.can_reverse() is True
     
     
-def test_string_mapper_edge_cases():
-    """Test StringMapper edge cases and error handling."""
+def test_string_lexicon_edge_cases():
+    """Test Lexicon edge cases and error handling."""
     
     # Empty string mappings
-    mapper = StringMapper({
+    mapper = Lexicon({
         '': 'empty_key',
         'empty_value': '',
         'normal': 'value'
@@ -233,7 +214,7 @@ def test_string_mapper_edge_cases():
     assert mapper[''] == 'empty_key'
     
     # Special characters and unicode
-    unicode_mapper = StringMapper({
+    unicode_lexicon = Lexicon({
         'café': 'coffee',
         '你好': 'hello',
         '🏥': 'hospital',
@@ -241,27 +222,27 @@ def test_string_mapper_edge_cases():
         'test.with.dots': 'dotted'
     })
     
-    assert unicode_mapper['café'] == 'coffee'
-    assert unicode_mapper['你好'] == 'hello'
-    assert unicode_mapper['🏥'] == 'hospital'
-    assert unicode_mapper['coffee'] == 'café'
+    assert unicode_lexicon['café'] == 'coffee'
+    assert unicode_lexicon['你好'] == 'hello'
+    assert unicode_lexicon['🏥'] == 'hospital'
+    assert unicode_lexicon['coffee'] == 'café'
     
     # Large mappings
-    large_mapper = StringMapper({
+    large_lexicon = Lexicon({
         f'key_{i}': f'value_{i}' 
         for i in range(1000)
     })
     
-    assert len(large_mapper) == 2000  # 1000 forward + 1000 reverse
-    assert large_mapper['key_500'] == 'value_500'
-    assert large_mapper['value_500'] == 'key_500'
+    assert len(large_lexicon) == 2000  # 1000 forward + 1000 reverse
+    assert large_lexicon['key_500'] == 'value_500'
+    assert large_lexicon['value_500'] == 'key_500'
 
 
-def test_string_mapper_conflicts():
-    """Test StringMapper behavior with potential conflicts."""
+def test_string_lexicon_conflicts():
+    """Test Lexicon behavior with potential conflicts."""
     
     # Test overlapping mappings (should work fine)
-    mapper = StringMapper({
+    mapper = Lexicon({
         'A': '1',
         'B': '2',
         ('C', 'D'): '3',
@@ -280,17 +261,17 @@ def test_string_mapper_conflicts():
     assert reverse_result in ['A', 'E']  # Either is acceptable
     
     # Test case sensitivity
-    case_mapper = StringMapper({
+    case_lexicon = Lexicon({
         'Hello': 'greeting',
         'HELLO': 'loud_greeting',
         'hello': 'quiet_greeting'
     })
     
-    assert case_mapper['Hello'] == 'greeting'
-    assert case_mapper['HELLO'] == 'loud_greeting'
-    assert case_mapper['hello'] == 'quiet_greeting'
+    assert case_lexicon['Hello'] == 'greeting'
+    assert case_lexicon['HELLO'] == 'loud_greeting'
+    assert case_lexicon['hello'] == 'quiet_greeting'
     
     # Each should reverse correctly
-    assert case_mapper['greeting'] == 'Hello'
-    assert case_mapper['loud_greeting'] == 'HELLO'
-    assert case_mapper['quiet_greeting'] == 'hello'
+    assert case_lexicon['greeting'] == 'Hello'
+    assert case_lexicon['loud_greeting'] == 'HELLO'
+    assert case_lexicon['quiet_greeting'] == 'hello'

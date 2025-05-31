@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from . import get as get_rs
 
 """
-A `DataCollection` is aconvenient wrapper around dict[str, dict] for managing collections of dictionary data.
+A `RecordSet` is aconvenient wrapper around dict[str, dict] for managing collections of dictionary data.
 
 Think of it as a group of dictionaries where you can `get` (with inter-dictionary references) and `select` from them as a group!
 
@@ -16,11 +16,11 @@ allowing users to work with collections semantically without worrying about keys
 
 Supports path-based queries, filtering, mapping, and other functional operations.
 """
-class DataCollection(dict):
+class RecordSet(dict):
 
     def __init__(self, items: Union[list[dict[str, Any]], dict[str, dict[str, Any]], None] = None, **kwargs):
         """
-        Initialize a DataCollection from a list or dict of dictionaries.
+        Initialize a RecordSet from a list or dict of dictionaries.
         
         Args:
             items: Either a list of dicts (auto-keyed by index) or a dict of dicts
@@ -81,13 +81,13 @@ class DataCollection(dict):
         Args:
             fields: Field specification ("*", "field1, field2", "nested.*")
             where: Optional filter predicate
-            flat: If True and single field, return list instead of DataCollection
+            flat: If True and single field, return list instead of RecordSet
             sparse: How to handle missing values ("preserve", "filter")
                    - "preserve": Keep items with None values (default for structure preservation)
                    - "filter": Remove items/fields with None values (default for aggregations)
             
         Returns:
-            DataCollection with query results, or list if flat=True
+            RecordSet with query results, or list if flat=True
         """
         # Parse field specification
         if fields == "*":
@@ -172,8 +172,8 @@ class DataCollection(dict):
         if flat and isinstance(field_list, list) and len(field_list) == 1:
             return result_items
         
-        # Create new DataCollection preserving structure
-        result = DataCollection()
+        # Create new RecordSet preserving structure
+        result = RecordSet()
         result._items = result_items
         
         # Preserve original keys
@@ -225,7 +225,7 @@ class DataCollection(dict):
         
         self[key] = item
     
-    def filter(self, predicate: Callable[[dict], bool]) -> "DataCollection":
+    def filter(self, predicate: Callable[[dict], bool]) -> "RecordSet":
         """
         Filter items based on a predicate function.
         
@@ -233,12 +233,12 @@ class DataCollection(dict):
             predicate: Function returning True for items to keep
             
         Returns:
-            New filtered DataCollection
+            New filtered RecordSet
         """
         filtered_items = [item for item in self._items if predicate(item)]
         
         # Create new collection with filtered items
-        result = DataCollection()
+        result = RecordSet()
         result._items = filtered_items
         
         # First pass: add all items with numeric keys
@@ -253,7 +253,7 @@ class DataCollection(dict):
         
         return result
     
-    def map(self, transform: Callable[[dict], dict]) -> "DataCollection":
+    def map(self, transform: Callable[[dict], dict]) -> "RecordSet":
         """
         Transform each item in the collection.
         
@@ -261,12 +261,12 @@ class DataCollection(dict):
             transform: Function to apply to each item
             
         Returns:
-            New DataCollection with transformed items
+            New RecordSet with transformed items
         """
         transformed = [transform(item) for item in self._items]
         
         # Create new collection
-        result = DataCollection()
+        result = RecordSet()
         result._items = transformed
         
         # Map old items to their indices for lookup

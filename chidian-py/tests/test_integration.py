@@ -5,9 +5,10 @@ from typing import Any, Dict, List, Optional
 
 from chidian import DictPiper, get
 from chidian.lib import put
-from chidian.mapper import StringMapper, StructMapper
+from chidian.lexicon import Lexicon
+from chidian.view import View
 from chidian.seeds import DROP, KEEP, CASE, COALESCE, SPLIT, MERGE, FLATTEN
-from chidian.collection import DataCollection
+from chidian.recordset import RecordSet
 import chidian.partials as p
 
 
@@ -229,8 +230,8 @@ def test_end_to_end_pipeline():
     # Step 1: Extract observations using direct get
     observations = get(fhir_bundle, "entry[*].resource")
     
-    # Step 2: Code mapping using StringMapper
-    code_mapper = StringMapper({
+    # Step 2: Code mapping using Lexicon
+    code_mapper = Lexicon({
         "8480-6": "systolic_bp",
         "8462-4": "diastolic_bp", 
         "85354-9": "blood_pressure"
@@ -387,8 +388,8 @@ def test_integration_with_all_components():
         ]
     }
     
-    # Component 1: Code mappings with StringMapper
-    code_mapper = StringMapper({
+    # Component 1: Code mappings with Lexicon
+    code_mapper = Lexicon({
         "8480-6": "systolic_bp",
         "271649006": "systolic_bp_snomed",
         "33747-0": "general_status"

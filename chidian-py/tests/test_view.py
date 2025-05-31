@@ -1,14 +1,14 @@
 import pytest
 from typing import Optional
-from chidian.mapper import StructMapper, Mapper
+from chidian.view import View
 
+import chidian.partials as p
+
+from pydantic import BaseModel
 
 def test_struct_mapper_basic():
-    """Test basic StructMapper functionality with Pydantic models."""
-    from chidian.mapper import StructMapper
-    from pydantic import BaseModel
-    from typing import Optional
-    
+    """Test basic View functionality with Pydantic models."""
+
     class SourceModel(BaseModel):
         subject: dict
         effectiveDateTime: str
@@ -19,7 +19,7 @@ def test_struct_mapper_basic():
         date: str
         value: Optional[int] = None
     
-    mapper = StructMapper(
+    mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={
@@ -43,12 +43,8 @@ def test_struct_mapper_basic():
 
 
 def test_struct_mapper_with_chains():
-    """Test StructMapper with chainable functions."""
-    from chidian.mapper import StructMapper
-    import chidian.partials as p
-    from pydantic import BaseModel
-    from typing import Optional
-    
+    """Test View with chainable functions."""
+
     class SourceModel(BaseModel):
         effectiveDateTime: str
         subject: dict
@@ -61,7 +57,7 @@ def test_struct_mapper_with_chains():
         normalized_code: str
         value: float
     
-    mapper = StructMapper(
+    mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={
@@ -95,8 +91,8 @@ def test_struct_mapper_with_chains():
 
 
 def test_struct_mapper_validation():
-    """Test StructMapper validation with required models."""
-    from chidian.mapper import StructMapper
+    """Test View validation with required models."""
+    from chidian.view import View
     from pydantic import BaseModel
     
     class SourceModel(BaseModel):
@@ -110,7 +106,7 @@ def test_struct_mapper_validation():
     
     # Should raise error for missing required field in strict mode
     with pytest.raises(ValueError, match="Missing required target fields"):
-        StructMapper(
+        View(
             source_model=SourceModel,
             target_model=TargetModel,
             mapping={
@@ -122,7 +118,7 @@ def test_struct_mapper_validation():
         )
     
     # Should work in non-strict mode
-    mapper = StructMapper(
+    mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={
@@ -138,8 +134,8 @@ def test_struct_mapper_validation():
 
 
 def test_struct_mapper_type_validation():
-    """Test StructMapper type validation."""
-    from chidian.mapper import StructMapper
+    """Test View type validation."""
+    from chidian.view import View
     from pydantic import BaseModel
     
     class SourceModel(BaseModel):
@@ -152,13 +148,13 @@ def test_struct_mapper_type_validation():
     
     # Should reject non-Pydantic classes
     with pytest.raises(TypeError, match="must be a Pydantic BaseModel"):
-        StructMapper(
+        View(
             source_model=dict,  # Not a Pydantic model
             target_model=TargetModel,
             mapping={'person_id': 'id'}
         )
     
-    mapper = StructMapper(
+    mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={'person_id': 'id', 'display_name': 'name'}
@@ -170,8 +166,8 @@ def test_struct_mapper_type_validation():
 
 
 def test_struct_mapper_with_conditionals():
-    """Test StructMapper with conditional mappings."""
-    from chidian.mapper import StructMapper
+    """Test View with conditional mappings."""
+    from chidian.view import View
     from pydantic import BaseModel
     from typing import Optional
     
@@ -185,7 +181,7 @@ def test_struct_mapper_with_conditionals():
         value: Optional[float] = None
     
     # Legacy dict-based conditionals
-    mapper = StructMapper(
+    mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={
@@ -221,8 +217,8 @@ def test_struct_mapper_with_conditionals():
 
 
 def test_struct_mapper_with_pydantic():
-    """Test StructMapper with Pydantic models."""
-    from chidian.mapper import StructMapper
+    """Test View with Pydantic models."""
+    from chidian.view import View
     import chidian.partials as p
     from pydantic import BaseModel
     from typing import Optional
@@ -239,7 +235,7 @@ def test_struct_mapper_with_pydantic():
         age_group: str
         status: str
     
-    mapper = StructMapper(
+    mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={
@@ -265,8 +261,9 @@ def test_struct_mapper_with_pydantic():
 
 
 def test_struct_mapper_with_string_mapper():
-    """Test combining StructMapper with StringMapper."""
-    from chidian.mapper import StructMapper, StringMapper
+    """Test combining View with Lexicon."""
+    from chidian.view import View
+    from chidian.lexicon import Lexicon
     import chidian.partials as p
     from pydantic import BaseModel
     
@@ -281,13 +278,13 @@ def test_struct_mapper_with_string_mapper():
         name: str
     
     # Code system mapper
-    gender_mapper = StringMapper({
+    gender_mapper = Lexicon({
         'male': 'M',
         'female': 'F',
         'other': 'O'
     })
     
-    struct_mapper = StructMapper(
+    struct_mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={
@@ -310,8 +307,8 @@ def test_struct_mapper_with_string_mapper():
 
 
 def test_struct_mapper_error_handling():
-    """Test StructMapper error handling."""
-    from chidian.mapper import StructMapper
+    """Test View error handling."""
+    from chidian.view import View
     import chidian.partials as p
     from pydantic import BaseModel
     from typing import Optional
@@ -325,7 +322,7 @@ def test_struct_mapper_error_handling():
         error: Optional[int] = None
     
     # Non-strict mode
-    mapper = StructMapper(
+    mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={
@@ -346,7 +343,7 @@ def test_struct_mapper_error_handling():
     assert result.error is None
     
     # Strict mode
-    strict_mapper = StructMapper(
+    strict_mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={'error': p.ChainableFn(lambda x: 1 / 0)},
@@ -359,7 +356,7 @@ def test_struct_mapper_error_handling():
 
 def test_struct_mapper_nested_mappings():
     """Test nested structure mappings."""
-    from chidian.mapper import StructMapper
+    from chidian.view import View
     import chidian.partials as p
     from pydantic import BaseModel
     from typing import Any
@@ -372,7 +369,7 @@ def test_struct_mapper_nested_mappings():
         patient: dict
         codes: list[str]
     
-    mapper = StructMapper(
+    mapper = View(
         source_model=SourceModel,
         target_model=TargetModel,
         mapping={
@@ -405,47 +402,10 @@ def test_struct_mapper_nested_mappings():
     assert result.codes == ['8480-6', '271649006']
 
 
-def test_struct_mapper_protocol():
-    """Test that StructMapper implements the Mapper protocol."""
-    # StructMapper implements Mapper protocol
-    from chidian.mapper import StructMapper
-    from pydantic import BaseModel
-    
-    class Source(BaseModel):
-        value: str
-    
-    class Target(BaseModel):
-        result: str
-    
-    struct_mapper = StructMapper(
-        source_model=Source,
-        target_model=Target,
-        mapping={'result': 'value'}
-    )
-    
-    assert isinstance(struct_mapper, Mapper)
-    assert hasattr(struct_mapper, 'forward')
-    assert hasattr(struct_mapper, 'metadata')
-    
-    # Check protocol methods work
-    source = Source(value='test')
-    result = struct_mapper.forward(source)
-    assert result.result == 'test'
-    assert isinstance(struct_mapper.metadata, dict)
-    
-    # StructMapper has additional methods beyond the protocol
-    assert hasattr(struct_mapper, 'reverse')
-    assert hasattr(struct_mapper, 'can_reverse')
-    assert struct_mapper.can_reverse() is False
-    
-    # Reverse should raise NotImplementedError
-    with pytest.raises(NotImplementedError):
-        struct_mapper.reverse(Target(result='test'))
-
 
 def test_struct_mapper_real_world():
-    """Test StructMapper with realistic FHIR to OMOP mapping."""
-    from chidian.mapper import StructMapper
+    """Test View with realistic FHIR to OMOP mapping."""
+    from chidian.view import View
     import chidian.partials as p
     from pydantic import BaseModel
     from typing import Optional, List
@@ -477,7 +437,7 @@ def test_struct_mapper_real_world():
         'mmHg': 8876,       # mmHg unit -> OMOP
     }
     
-    mapper = StructMapper(
+    mapper = View(
         source_model=FHIRObservation,
         target_model=OMOPMeasurement,
         mapping={
@@ -526,8 +486,8 @@ def test_struct_mapper_real_world():
 
 
 def test_struct_mapper_edge_cases():
-    """Test StructMapper edge cases."""
-    from chidian.mapper import StructMapper
+    """Test View edge cases."""
+    from chidian.view import View
     import chidian.partials as p
     from pydantic import BaseModel
     from typing import Optional, List, Any
@@ -544,7 +504,7 @@ def test_struct_mapper_edge_cases():
         safe: Optional[str] = None
     
     # Test with various edge cases
-    mapper = StructMapper(
+    mapper = View(
         source_model=FlexibleSource,
         target_model=FlexibleTarget,
         mapping={

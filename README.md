@@ -50,8 +50,11 @@ The file structure is organized into the core abstractions of the library (re-or
     ├── chidian/
     │   ├── __init__.py     # Main exports
     │   ├── lib.py          # `put` -- bidirectional complement to `get` (Rust-optimized)
-    │   ├── collection.py   # `DataCollection` -- the core data wrapper for dict collections
-    │   ├── mapper.py       # `StringMapper` + `StructMapper` -- mapping logic as readable `dict[str, Any]`
+    │   ├── lens.py         # `put` -- bidirectional complement to `get` (Rust-optimized)
+    │   ├── recordset.py    # `RecordSet` -- the core data wrapper for dict collections
+    │   ├── mapper.py       # `Mapper` -- base protocol for all data transformations
+    │   ├── lexicon.py      # `Lexicon` -- bidirectional string-to-string mappings (e.g., code lookups)
+    │   ├── view.py         # `View` -- structured data transformations with Pydantic models
     │   ├── piper.py        # `DictPiper` -- the core mapping runtime/execution class
     │   ├── seeds.py        # `DROP`, `KEEP`, `CASE`, etc. -- SEED objects for data transformations
     │   └── partials.py     # `import partials as p` -- standard operations as partial functions
@@ -69,7 +72,7 @@ Let's say we want to conver this source [JSON A](./chidian-py/tests/A.json) into
 
 If you look at the data, JSON A is _more nested + expressive_ and JSON B is _more flat + compressed_. 
 
-We can balance the expressiveness of then nesting through the expressive structure of the `StructMapper`
+We can balance the expressiveness of then nesting through the expressive structure of the `View`
 
 ### A -> B
 

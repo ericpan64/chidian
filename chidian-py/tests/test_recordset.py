@@ -1,8 +1,8 @@
 import pytest
-from chidian.collection import DataCollection
+from chidian.recordset import RecordSet
 
 def test_basic_collection():
-    """Test basic DataCollection functionality."""
+    """Test basic RecordSet functionality."""
     # Create from list
     items = [
         {"id": "p1", "name": "John", "age": 30},
@@ -10,7 +10,7 @@ def test_basic_collection():
         {"id": "p3", "name": "Bob", "age": 35}
     ]
     
-    collection = DataCollection(items)
+    collection = RecordSet(items)
     
     # Test length
     assert len(collection) == 3
@@ -25,7 +25,7 @@ def test_basic_collection():
 
 def test_dict_access_and_get_all():
     """Test built-in dict access and get_all method."""
-    collection = DataCollection([
+    collection = RecordSet([
         {"patient": {"id": "123", "name": "John"}, "status": "active"},
         {"patient": {"id": "456", "name": "Jane"}, "status": "inactive"},
         {"patient": {"id": "789", "name": "Bob"}, "status": "active"}
@@ -61,7 +61,7 @@ def test_dict_access_and_get_all():
 
 def test_select_method():
     """Test the enhanced select method with field selection."""
-    collection = DataCollection([
+    collection = RecordSet([
         {"name": "John", "age": 30, "patient": {"id": "p1", "status": "active"}},
         {"name": "Jane", "age": 25, "patient": {"id": "p2", "status": "inactive"}},
         {"name": "Bob", "age": 35, "patient": {"id": "p3", "status": "active"}},
@@ -122,7 +122,7 @@ def test_select_method():
 
 def test_sparse_data_handling():
     """Test sparse data handling with missing fields."""
-    collection = DataCollection([
+    collection = RecordSet([
         {"name": "John", "age": 30, "patient": {"id": "p1", "status": "active"}},
         {"name": "Jane", "age": 25},  # Missing patient field
         {"name": "Bob", "patient": {"id": "p3"}},  # Missing age and patient.status
@@ -183,7 +183,7 @@ def test_sparse_data_handling():
 
 def test_filter_method():
     """Test the filter method."""
-    collection = DataCollection([
+    collection = RecordSet([
         {"name": "John", "age": 30, "active": True},
         {"name": "Jane", "age": 25, "active": False},
         {"name": "Bob", "age": 35, "active": True}
@@ -214,7 +214,7 @@ def test_filter_method():
 
 def test_map_method():
     """Test the map method."""
-    collection = DataCollection([
+    collection = RecordSet([
         {"name": "John", "age": 30},
         {"name": "Jane", "age": 25}
     ])
@@ -227,7 +227,7 @@ def test_map_method():
 
 def test_to_json():
     """Test JSON serialization."""
-    collection = DataCollection([
+    collection = RecordSet([
         {"id": 1, "name": "Test"},
         {"id": 2, "name": "Another"}
     ])
@@ -244,7 +244,7 @@ def test_to_json():
 
 def test_append_method():
     """Test appending items to collection."""
-    collection = DataCollection()
+    collection = RecordSet()
     
     # Append with auto-generated key
     collection.append({"name": "John"})
@@ -266,7 +266,7 @@ def test_append_method():
 
 def test_complex_nested_access():
     """Test complex nested data access."""
-    collection = DataCollection([
+    collection = RecordSet([
         {
             "patient": {
                 "id": "123",
