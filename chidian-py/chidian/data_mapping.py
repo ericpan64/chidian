@@ -2,7 +2,7 @@
 Unified data mapping interface that supports both unidirectional (View) and bidirectional (Lens) transformations.
 """
 
-from typing import Any, Optional, Type, TypeVar, Tuple, Union
+from typing import Any, Optional, Type, TypeVar, Tuple, Union, Callable
 from pydantic import BaseModel
 from .recordset import RecordSet
 from .lib import put
@@ -25,7 +25,7 @@ class DataMapping:
         self,
         source_model: Type[SourceT],
         target_model: Type[TargetT], 
-        mapping: dict[str, Any],
+        mapping: Union[Callable[[dict], dict], dict[str, Any]],
         bidirectional: bool = False,
         strict: bool = True,
         metadata: Optional[dict] = None
@@ -36,8 +36,9 @@ class DataMapping:
         Args:
             source_model: Source Pydantic BaseModel class
             target_model: Target Pydantic BaseModel class
-            mapping: Field mapping definitions
-            bidirectional: If True, enables bidirectional mode (Lens) with reversible mappings
+            mapping: Either a callable that transforms source dict to target dict,
+                    or a dict of field mappings (for bidirectional mode)
+            bidirectional: If True, enables bidirectional mode with reversible mappings
             strict: If True, validate against models and fail on errors
             metadata: Optional metadata about the mapping
         """
@@ -61,8 +62,12 @@ class DataMapping:
         self._function_chain = FunctionChain
         self._chainable_fn = ChainableFn
         
-        # Bidirectional-specific setup
+        # Validate mapping type based on mode
         if self.bidirectional:
+            # Bidirectional mode requires dict mappings for reversibility
+            if not isinstance(mapping, dict):
+                raise TypeError("Bidirectional mappings must be dict of string-to-string paths")
+            
             # Validate all mappings are string-to-string for reversibility
             for source_path, target_path in mapping.items():
                 if not isinstance(source_path, str) or not isinstance(target_path, str):
@@ -76,13 +81,21 @@ class DataMapping:
                 duplicates = [v for v in mapping.values() if list(mapping.values()).count(v) > 1]
                 raise ValueError(f"Mapping is not reversible - duplicate target paths: {duplicates}")
         else:
-            # Unidirectional mode (View) - validate mapping in strict mode
-            if self.strict:
-                validation_issues = self._validate_mapping()
-                if validation_issues['missing_required_fields']:
-                    raise ValueError(
-                        f"Missing required target fields in mapping: {validation_issues['missing_required_fields']}"
-                    )
+
+            # Unidirectional mode - supports both callable and dict mappings
+            if callable(mapping):
+                # Callable mapping - store as mapping function
+                self.mapping_fn = mapping
+            elif isinstance(mapping, dict):
+                # Dict mapping - validate in strict mode
+                if self.strict:
+                    validation_issues = self._validate_mapping()
+                    if validation_issues['missing_required_fields']:
+                        raise ValueError(
+                            f"Missing required target fields in mapping: {validation_issues['missing_required_fields']}"
+                        )
+            else:
+                raise TypeError("Mapping must be callable or dict for unidirectional mode")
     
     def forward(self, source: Union[SourceT, dict]) -> Union[TargetT, Tuple[TargetT, RecordSet]]:
         """
@@ -123,27 +136,40 @@ class DataMapping:
             
             return target, spillover
         else:
-            # Unidirectional mode - complex mappings
-            result = {}
-            
-            for target_field, mapping_spec in self.mapping.items():
+            # Unidirectional mode
+            if hasattr(self, 'mapping_fn'):
+                # Callable mapping - apply function
                 try:
-                    result[target_field] = self._process_mapping(source_dict, mapping_spec)
+                    result = self.mapping_fn(source_dict)
+                    # Validate and construct target model
+                    return self.target_model.model_validate(result)
                 except Exception as e:
                     if self.strict:
-                        raise ValueError(f"Error mapping field '{target_field}': {e}")
-                    # In non-strict mode, skip failed mappings
-                    continue
-            
-            # Validate and construct target model
-            try:
-                return self.target_model.model_validate(result)
-            except Exception as e:
-                if self.strict:
-                    raise ValueError(f"Failed to construct {self.target_model.__name__}: {e}")
-                # Return dict as fallback
-                return result
-    
+                        raise ValueError(f"Error in mapping function: {e}")
+                    # Return dict as fallback
+                    return result
+            else:
+                # Dict mapping - process field by field
+                result = {}
+                
+                for target_field, mapping_spec in self.mapping.items():
+                    try:
+                        result[target_field] = self._process_mapping(source_dict, mapping_spec)
+                    except Exception as e:
+                        if self.strict:
+                            raise ValueError(f"Error mapping field '{target_field}': {e}")
+                        # In non-strict mode, skip failed mappings
+                        continue
+                
+                # Validate and construct target model
+                try:
+                    return self.target_model.model_validate(result)
+                except Exception as e:
+                    if self.strict:
+                        raise ValueError(f"Failed to construct {self.target_model.__name__}: {e}")
+                    # Return dict as fallback
+                    return result
+
     def reverse(self, target: TargetT, spillover: Optional[RecordSet] = None) -> SourceT:
         """
         Reverse transformation (target to source). Only available in bidirectional mode.
@@ -278,13 +304,17 @@ class DataMapping:
         return result
     
     def _validate_mapping(self) -> dict[str, list[str]]:
-        """Validate the mapping against source and target models (unidirectional mode)."""
+        """Validate the mapping against source and target models (unidirectional mode with dict mapping)."""
         issues = {
             'missing_required_fields': [],
             'unknown_target_fields': [],
             'invalid_source_fields': []
         }
         
+        # Skip validation for callable mappings
+        if hasattr(self, 'mapping_fn'):
+            return issues
+
         # Get target model fields
         target_fields = self._get_model_fields(self.target_model)
         

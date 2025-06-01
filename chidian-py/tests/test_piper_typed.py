@@ -220,17 +220,17 @@ class TestPiperBidirectional:
 
 
 class TestPiperErrorHandling:
-    """Test Piper error handling for unsupported modes."""
+    """Test Piper error handling for invalid inputs."""
     
-    def test_callable_without_dict_types_fails(self):
-        """Test that Piper rejects callables without dict types."""
+    def test_piper_requires_data_mapping(self):
+        """Test that Piper requires a DataMapping instance."""
         def mapper(patient: Patient) -> Observation:
             return Observation(
                 subject_ref=patient.id,
                 performer=patient.name
             )
         
-        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or DataMapping objects"):
+        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or View/Lens objects"):
             Piper(mapper)
     
     def test_callable_with_wrong_types_fails(self):
@@ -238,26 +238,34 @@ class TestPiperErrorHandling:
         def mapper(x: int) -> str:
             return str(x)
         
-        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or DataMapping objects"):
+        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or View/Lens objects"):
             Piper(mapper, source_type=int, target_type=str)
     
-    def test_dict_mode_requires_callable(self):
-        """Test that dict mode requires a callable transformer."""
-        with pytest.raises(TypeError, match="Transformer must be callable for dict mode"):
-            Piper("not a function", source_type=dict, target_type=dict)
+    def test_piper_rejects_none(self):
+        """Test that Piper rejects None."""
+        with pytest.raises(TypeError, match="Piper requires a DataMapping instance"):
+            Piper(None)
 
 
 class TestPiperStrictMode:
     """Test Piper strict mode behavior."""
     
-    def test_dict_mode_type_info(self):
-        """Test that dict mode has dict type requirements."""
+    def test_piper_inherits_data_mapping_properties(self):
+        """Test that Piper inherits properties from DataMapping."""
         def mapper(data: dict) -> dict:
             return {"result": data.get("value")}
         
-        piper = Piper(mapper, source_type=dict, target_type=dict)
-        assert piper.input_type is dict
-        assert piper.output_type is dict
+        class SourceModel(BaseModel):
+            value: str
+        
+        class TargetModel(BaseModel):
+            result: str
+        
+        data_mapping = DataMapping(SourceModel, TargetModel, mapper, strict=False)
+        piper = Piper(data_mapping)
+        
+        assert piper.input_type is SourceModel
+        assert piper.output_type is TargetModel
         assert piper.strict is False
     
     def test_lens_inherits_strict_mode(self):

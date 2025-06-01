@@ -2,20 +2,20 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> Declarative, type‑safe data mapping for humans. Backed by Rust speed and the Pydantic ecosystem.
+> Declarative, type‑safe data mapping for humans. Backed by Rust speed and the Pydantic ecosystem.
 
 chidian is a cross-language framework for composable, readable, and sharable data mappings built on top of Pydantic.
 
 ## Install
 ```
-pip install chidian   # Python ≥ 3.8
+pip install chidian   # Python ≥ 3.8
 ```
 The wheel bundles the Rust core; no system toolchain required.
 
 ## 30-second tour
 ```python
 from pydantic import BaseModel
-from chidian import DataMapping, DictPiper, template
+from chidian import DataMapping, Piper, template
 import chidian.partials as p
 
 # 🎙️ 1. Describe your schemas
@@ -27,56 +27,59 @@ class Target(BaseModel):
     full_name: str
     address: str
 
-# 🔎 2. Declare a bidirectional mapping – it works forward *and* back
+# 🔎 2. Define mapping logic with helpful partial functions
+fmt = p.template("{} {} {}", skip_none=True)
 person_mapping = DataMapping(
     Source,
     Target,
+    mapping=lambda src: {
+        "full_name": fmt(
+            p.get("name.first")(src),
+            p.get("name.given[*]") >> p.join(" ")(src),
+            p.get("name.suffix")(src),
+        ),
+        "address": p.get("address") >> p.flatten_paths(
+            ["street[0]", "street[1]", "city", "postal_code", "country"],
+            delimiter="\n"
+        )(src),
+    }
+)
+
+# 🌱 3. Create runtime and execute transformation
+piper = Piper(person_mapping)
+target_record = piper(source_data)
+
+# For bidirectional mappings, use simple path mappings:
+bidirectional_mapping = DataMapping(
+    Source,
+    Target,
     mapping={
-        "name.first": "full_name",   # we’ll format this below
+        "name.first": "full_name",
         "address": "address"
     },
-    strict=False,
     bidirectional=True,
 )
 
-# 🌱 3. Add logic where needed with helpful partial functions + `SEED`s
-fmt = p.template("{} {} {}", skip_none=True)
-A_to_B = DictPiper(lambda src: {
-    "full_name": fmt(
-        p.get("name.first")(src),
-        p.get("name.given[*]") >> p.join(" ")(src),
-        p.get("name.suffix")(src),
-    ),
-    "address":  p.get("address") >> p.flatten_paths(
-        ["street[0]", "street[1]", "city", "postal_code", "country"],
-        delimiter="\n"
-    )(src),
-})
-
-# ⏩ Forward transform (A → B)
-b_record = A_to_B(source_json)
-
-# ⏪ Reverse transform (B → A) – zero extra code!
-source_roundtrip, _spill = person_mapping.reverse(
-    Target.model_validate(b_record),
-    spillover=None
-)
+# ⏪ Reverse transform (B → A) – zero extra code!
+bidirectional_piper = Piper(bidirectional_mapping)
+target, spillover = bidirectional_piper(source_data)
+source_roundtrip = bidirectional_piper.reverse(target, spillover)
 ```
 
 See the [tests](/chidian-py/tests) for some use-cases.
 
 ## Feature highlights
 
-| Feature          | In one line                                                                  |
+| Feature          | In one line                                                                  |
 | ---------------- | ---------------------------------------------------------------------------- |
-| **Piper**        | Declarative, composable `dict -> dict` transforms (SEEDs for KEEP/DROP).     |
-| **DataMapping**  | Unidirectional or bidirectional mappings between Pydantic models with spill-over preservation. |
+| **Piper**        | Runtime engine for executing DataMapping transformations between Pydantic models. |
+| **DataMapping**  | Unidirectional or bidirectional mappings between Pydantic models with callable logic support. |
 | **Partials API** | `>>` operator chains (`split >> last >> upper`) keep lambdas away.           |
 | **RecordSet**    | Lightweight collection class: `select`, `filter`, `to_json`, arrow export.   |
-| **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |
+| **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |
 
 
-## Powered by Pydantic
+## Powered by Pydantic
 
 chidian treats **Pydantic v2 models as first‑class citizens**:
 
