@@ -15,7 +15,7 @@ The wheel bundles the Rust core; no system toolchain required.
 ## 30-second tour
 ```python
 from pydantic import BaseModel
-from chidian import Lens, DictPiper, template
+from chidian import DataMapping, DictPiper, template
 import chidian.partials as p
 
 # 🎙️ 1. Describe your schemas
@@ -27,15 +27,16 @@ class Target(BaseModel):
     full_name: str
     address: str
 
-# 🔎 2. Declare a **lens** once – it works forward *and* back
-person_lens = Lens(
+# 🔎 2. Declare a bidirectional mapping – it works forward *and* back
+person_mapping = DataMapping(
     Source,
     Target,
-    mappings={
+    mapping={
         "name.first": "full_name",   # we’ll format this below
         "address": "address"
     },
     strict=False,
+    bidirectional=True,
 )
 
 # 🌱 3. Add logic where needed with helpful partial functions + `SEED`s
@@ -56,7 +57,7 @@ A_to_B = DictPiper(lambda src: {
 b_record = A_to_B(source_json)
 
 # ⏪ Reverse transform (B → A) – zero extra code!
-source_roundtrip, _spill = person_lens.reverse(
+source_roundtrip, _spill = person_mapping.reverse(
     Target.model_validate(b_record),
     spillover=None
 )
@@ -69,7 +70,7 @@ See the [tests](/chidian-py/tests) for some use-cases.
 | Feature          | In one line                                                                  |
 | ---------------- | ---------------------------------------------------------------------------- |
 | **Piper**        | Declarative, composable `dict -> dict` transforms (SEEDs for KEEP/DROP).     |
-| **Lens**         | Bijective mappings between two Pydantic models with spill‑over preservation. |
+| **DataMapping**  | Unidirectional or bidirectional mappings between Pydantic models with spill-over preservation. |
 | **Partials API** | `>>` operator chains (`split >> last >> upper`) keep lambdas away.           |
 | **RecordSet**    | Lightweight collection class: `select`, `filter`, `to_json`, arrow export.   |
 | **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |

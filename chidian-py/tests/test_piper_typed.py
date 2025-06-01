@@ -1,13 +1,10 @@
-"""Tests for Piper with View and Lens integration."""
+"""Tests for Piper with DataMapping integration."""
 
 import pytest
 from typing import Optional
 from pydantic import BaseModel
 
-from chidian.piper import Piper
-from chidian.view import View
-from chidian.lens import Lens
-from chidian.recordset import RecordSet
+from chidian import Piper, DataMapping, RecordSet
 
 
 class Patient(BaseModel):
@@ -25,16 +22,16 @@ class Observation(BaseModel):
     status: Optional[str] = None
 
 
-class TestPiperView:
+class TestPiperUnidirectional:
     """Test Piper with View (unidirectional)."""
     
     def test_typed_piper_view_creation(self):
         """Test Piper can be created with View."""
-        view = View(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "subject_ref": "id",  # View expects target_field: source_field
             "performer": "name"
-        }, strict=False)  # Use non-strict mode to avoid validation errors
-        piper = Piper(view)
+        }, strict=False, bidirectional=False)  # Use non-strict mode to avoid validation errors
+        piper = Piper(mapping)
         
         assert piper.input_type == Patient
         assert piper.output_type == Observation
@@ -43,11 +40,11 @@ class TestPiperView:
     
     def test_typed_piper_view_forward(self):
         """Test forward transformation with View."""
-        view = View(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "subject_ref": "id",  # View expects target_field: source_field
             "performer": "name"
-        }, strict=False)
-        piper = Piper(view)
+        }, strict=False, bidirectional=False)
+        piper = Piper(mapping)
         
         patient = Patient(id="123", name="John", active=True, age=45)
         obs = piper.forward(patient)
@@ -63,11 +60,11 @@ class TestPiperView:
     
     def test_typed_piper_view_call_syntax(self):
         """Test Piper can be called directly."""
-        view = View(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "subject_ref": "id",
             "performer": "name"
-        }, strict=False)
-        piper = Piper(view)
+        }, strict=False, bidirectional=False)
+        piper = Piper(mapping)
         
         patient = Patient(id="123", name="John", active=True)
         obs = piper(patient)  # Should work same as forward()
@@ -81,25 +78,25 @@ class TestPiperView:
             assert obs.performer == "John"
     
     def test_typed_piper_view_reverse_fails(self):
-        """Test that View-based Piper cannot reverse."""
-        view = View(Patient, Observation, {
+        """Test that unidirectional DataMapping-based Piper cannot reverse."""
+        mapping = DataMapping(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
-        }, strict=False)
-        piper = Piper(view)
+        }, strict=False, bidirectional=False)
+        piper = Piper(mapping)
         
         obs = Observation(subject_ref="123", performer="John")
         
-        with pytest.raises(ValueError, match="Reverse transformation only available for Lens"):
+        with pytest.raises(ValueError, match="Reverse transformation only available for bidirectional mappings"):
             piper.reverse(obs)
     
     def test_typed_piper_view_type_validation(self):
         """Test type validation."""
-        view = View(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "subject_ref": "id",
             "performer": "name"
-        }, strict=False)
-        piper = Piper(view)
+        }, strict=False, bidirectional=False)
+        piper = Piper(mapping)
         
         # Correct type should work
         patient = Patient(id="123", name="John", active=True)
@@ -112,26 +109,26 @@ class TestPiperView:
     
     def test_create_unidirectional_piper(self):
         """Test creating unidirectional piper."""
-        view = View(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
-        }, strict=False)
-        piper = Piper(view)
+        }, strict=False, bidirectional=False)
+        piper = Piper(mapping)
         
         assert isinstance(piper, Piper)
         assert piper._mode == "view"
 
 
-class TestPiperLens:
+class TestPiperBidirectional:
     """Test Piper with Lens (bidirectional)."""
     
     def test_typed_piper_lens_creation(self):
         """Test Piper can be created with Lens."""
-        lens = Lens(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
-        })
-        piper = Piper(lens)
+        }, bidirectional=True)
+        piper = Piper(mapping)
         
         assert piper.input_type == Patient
         assert piper.output_type == Observation
@@ -140,11 +137,11 @@ class TestPiperLens:
     
     def test_typed_piper_lens_forward(self):
         """Test forward transformation with Lens."""
-        lens = Lens(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
-        })
-        piper = Piper(lens)
+        }, bidirectional=True)
+        piper = Piper(mapping)
         
         patient = Patient(id="123", name="John", active=True, age=45)
         obs, spillover = piper.forward(patient)
@@ -160,11 +157,11 @@ class TestPiperLens:
     
     def test_typed_piper_lens_reverse(self):
         """Test reverse transformation with Lens."""
-        lens = Lens(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
-        })
-        piper = Piper(lens)
+        }, bidirectional=True)
+        piper = Piper(mapping)
         
         obs = Observation(subject_ref="123", performer="John")
         spillover = RecordSet([{"active": True, "age": 45}])
@@ -179,11 +176,11 @@ class TestPiperLens:
     
     def test_typed_piper_lens_roundtrip(self):
         """Test lossless roundtrip with Lens."""
-        lens = Lens(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
-        })
-        piper = Piper(lens)
+        }, bidirectional=True)
+        piper = Piper(mapping)
         
         original = Patient(id="123", name="John", active=True, age=45)
         
@@ -197,11 +194,11 @@ class TestPiperLens:
     
     def test_typed_piper_lens_call_syntax(self):
         """Test Piper with Lens can be called directly."""
-        lens = Lens(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
-        })
-        piper = Piper(lens)
+        }, bidirectional=True)
+        piper = Piper(mapping)
         
         patient = Patient(id="123", name="John", active=True)
         obs, spillover = piper(patient)  # Should work same as forward()
@@ -211,11 +208,11 @@ class TestPiperLens:
     
     def test_create_bidirectional_piper(self):
         """Test creating bidirectional piper."""
-        lens = Lens(Patient, Observation, {
+        mapping = DataMapping(Patient, Observation, {
             "id": "subject_ref",
             "name": "performer"
-        })
-        piper = Piper(lens)
+        }, bidirectional=True)
+        piper = Piper(mapping)
         
         assert isinstance(piper, Piper)
         assert piper._mode == "lens"
@@ -233,7 +230,7 @@ class TestPiperErrorHandling:
                 performer=patient.name
             )
         
-        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or View/Lens objects"):
+        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or DataMapping objects"):
             Piper(mapper)
     
     def test_callable_with_wrong_types_fails(self):
@@ -241,7 +238,7 @@ class TestPiperErrorHandling:
         def mapper(x: int) -> str:
             return str(x)
         
-        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or View/Lens objects"):
+        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or DataMapping objects"):
             Piper(mapper, source_type=int, target_type=str)
     
     def test_dict_mode_requires_callable(self):
@@ -264,23 +261,23 @@ class TestPiperStrictMode:
         assert piper.strict is False
     
     def test_lens_inherits_strict_mode(self):
-        """Test that Piper inherits strict mode from lens."""
-        lens_strict = Lens(Patient, Observation, {"id": "subject_ref", "name": "performer"}, strict=True)
-        lens_nonstrict = Lens(Patient, Observation, {"id": "subject_ref", "name": "performer"}, strict=False)
+        """Test that Piper inherits strict mode from mapping."""
+        mapping_strict = DataMapping(Patient, Observation, {"id": "subject_ref", "name": "performer"}, strict=True, bidirectional=True)
+        mapping_nonstrict = DataMapping(Patient, Observation, {"id": "subject_ref", "name": "performer"}, strict=False, bidirectional=False)
         
-        piper_strict = Piper(lens_strict)
-        piper_nonstrict = Piper(lens_nonstrict)
+        piper_strict = Piper(mapping_strict)
+        piper_nonstrict = Piper(mapping_nonstrict)
         
         assert piper_strict.strict is True
         assert piper_nonstrict.strict is False
     
     def test_strict_input_validation(self):
-        """Test strict input type validation with lens."""
-        lens = Lens(Patient, Observation, {
+        """Test strict input type validation with mapping."""
+        mapping = DataMapping(Patient, Observation, {
             "id": "subject_ref", 
             "name": "performer"
-        }, strict=True)
-        piper = Piper(lens)
+        }, strict=True, bidirectional=True)
+        piper = Piper(mapping)
         
         # Correct type works
         patient = Patient(id="123", name="John", active=True)
@@ -298,8 +295,8 @@ class TestPiperIntegration:
     def test_type_safety_prevents_chaining_errors(self):
         """Test that type safety prevents incompatible chaining."""
         # Create two pipers with incompatible types
-        view1 = View(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False)
-        piper1 = Piper(view1)
+        mapping1 = DataMapping(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False, bidirectional=False)
+        piper1 = Piper(mapping1)
         
         # This would be a type error if we tried to chain with a different input type
         # (In real usage, mypy/type checker would catch this)
@@ -309,23 +306,23 @@ class TestPiperIntegration:
     def test_mixed_mode_workflow(self):
         """Test workflow mixing View and Lens based pipers."""
         # Step 1: Use View for one-way transformation
-        view = View(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False)
-        view_piper = Piper(view)
+        mapping = DataMapping(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False, bidirectional=False)
+        unidirectional_piper = Piper(mapping)
         
         # Step 2: Use Lens for bidirectional transformation
-        lens = Lens(Patient, Observation, {"id": "subject_ref", "name": "performer"})
-        lens_piper = Piper(lens)
+        mapping = DataMapping(Patient, Observation, {"id": "subject_ref", "name": "performer"}, bidirectional=True)
+        bidirectional_piper = Piper(mapping)
         
         patient = Patient(id="123", name="John", active=True, age=45)
         
         # View transformation (one-way) - may return dict in non-strict mode
-        obs_view = view_piper.forward(patient)
-        if isinstance(obs_view, dict):
-            assert obs_view.get("subject_ref") == "123"
+        obs_unidirectional = unidirectional_piper.forward(patient)
+        if isinstance(obs_unidirectional, dict):
+            assert obs_unidirectional.get("subject_ref") == "123"
         else:
-            assert obs_view.subject_ref == "123"
+            assert obs_unidirectional.subject_ref == "123"
         
         # Lens transformation (bidirectional)
-        obs_lens, spillover = lens_piper.forward(patient)
-        recovered = lens_piper.reverse(obs_lens, spillover)
+        obs_bidirectional, spillover = bidirectional_piper.forward(patient)
+        recovered = bidirectional_piper.reverse(obs_bidirectional, spillover)
         assert recovered == patient

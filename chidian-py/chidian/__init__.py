@@ -2,8 +2,7 @@ from .chidian_rs import get
 from .lib import put
 from .recordset import RecordSet
 from .piper import Piper
-from .view import View
-from .lens import Lens
+from .data_mapping import DataMapping
 from .seeds import DROP, KEEP
 from .partials import FunctionChain, ChainableFn, case, first_non_empty, template, flatten
 
@@ -12,8 +11,7 @@ __all__ = [
     "put", 
     "RecordSet",
     "Piper",
-    "View",
-    "Lens",
+    "DataMapping",
     "DROP",
     "KEEP",
     "FunctionChain",
