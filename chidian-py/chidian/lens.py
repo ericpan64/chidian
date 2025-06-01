@@ -19,10 +19,10 @@ class Lens(Generic[SourceT, TargetT]):
         strict: bool = True
     ):
         """Initialize a bidirectional lens between Pydantic models."""
-        # Validate Pydantic models
+        # Validate Pydantic v2 models
         for model, name in [(source_model, "source"), (target_model, "target")]:
-            if not (hasattr(model, 'model_fields') or hasattr(model, '__fields__')):
-                raise TypeError(f"{name}_model must be a Pydantic BaseModel")
+            if not hasattr(model, 'model_fields'):
+                raise TypeError(f"{name}_model must be a Pydantic v2 BaseModel")
         
         # Validate string-only mappings
         for source_path, target_path in mappings.items():
@@ -49,7 +49,7 @@ class Lens(Generic[SourceT, TargetT]):
     def forward(self, source: SourceT) -> Tuple[TargetT, RecordSet]:
         """Transform source model to target model + spillover."""
         # Convert to dict
-        source_dict = source.model_dump() if hasattr(source, 'model_dump') else source.dict()
+        source_dict = source.model_dump()
         
         # Apply mappings
         target_data = {}
@@ -74,7 +74,7 @@ class Lens(Generic[SourceT, TargetT]):
             raise ValueError("This lens cannot reverse - mappings are not bidirectional")
         
         # Convert target to dict
-        target_dict = target.model_dump() if hasattr(target, 'model_dump') else target.dict()
+        target_dict = target.model_dump()
         
         # Apply reverse mappings
         source_data = {}

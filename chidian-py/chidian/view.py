@@ -41,11 +41,11 @@ class View:
             metadata: Optional metadata about the mapping
         """
         
-        # Validate that models are Pydantic BaseModels
-        if not (hasattr(source_model, 'model_fields') or hasattr(source_model, '__fields__')):
-            raise TypeError(f"source_model must be a Pydantic BaseModel, got {type(source_model)}")
-        if not (hasattr(target_model, 'model_fields') or hasattr(target_model, '__fields__')):
-            raise TypeError(f"target_model must be a Pydantic BaseModel, got {type(target_model)}")
+        # Validate that models are Pydantic v2 BaseModels
+        if not hasattr(source_model, 'model_fields'):
+            raise TypeError(f"source_model must be a Pydantic v2 BaseModel, got {type(source_model)}")
+        if not hasattr(target_model, 'model_fields'):
+            raise TypeError(f"target_model must be a Pydantic v2 BaseModel, got {type(target_model)}")
         
         self.source_model = source_model
         self.target_model = target_model
@@ -83,16 +83,11 @@ class View:
             if self.strict:
                 raise TypeError(f"Expected {self.source_model.__name__}, got {type(source).__name__}")
             # Try to convert if not strict
-            if hasattr(self.source_model, 'model_validate'):
-                source = self.source_model.model_validate(source)
-            else:
-                source = self.source_model(**source)
+            source = self.source_model.model_validate(source)
         
         # Convert to dict for processing
         if hasattr(source, 'model_dump'):
             source_dict = source.model_dump()
-        elif hasattr(source, 'dict'):
-            source_dict = source.dict()
         else:
             source_dict = source
         
@@ -114,13 +109,8 @@ class View:
         
         # Validate and construct target model
         try:
-            # Handle Pydantic BaseModel
-            if hasattr(self.target_model, 'model_validate'):
-                return self.target_model.model_validate(result)
-            elif hasattr(self.target_model, 'parse_obj'):
-                return self.target_model.parse_obj(result)
-            else:
-                return self.target_model(**result)
+            # Handle Pydantic v2 BaseModel
+            return self.target_model.model_validate(result)
         except Exception as e:
             if self.strict:
                 raise ValueError(f"Failed to construct {self.target_model.__name__}: {e}")
@@ -219,26 +209,13 @@ class View:
         return issues
     
     def _get_model_fields(self, model: type) -> dict:
-        """Get fields from Pydantic model (v1 or v2 compatible)."""
-        if hasattr(model, 'model_fields'):
-            # Pydantic v2
-            return model.model_fields
-        elif hasattr(model, '__fields__'):
-            # Pydantic v1
-            return model.__fields__
-        else:
-            return {}
+        """Get fields from Pydantic v2 model."""
+        return getattr(model, 'model_fields', {})
     
     def _is_field_required(self, field_info) -> bool:
-        """Check if field is required (v1/v2 compatible)."""
-        if hasattr(field_info, 'is_required'):
-            # Pydantic v1
-            return field_info.is_required()
-        elif hasattr(field_info, 'default'):
-            # Pydantic v2 - required if no default
-            return field_info.default is ...
-        else:
-            return False
+        """Check if field is required in Pydantic v2."""
+        # In Pydantic v2, use is_required() method
+        return field_info.is_required()
 
 # """
 # A `BijectiveView` is a `View` that is bijective, i.e. it has a one-to-one mapping in both directions

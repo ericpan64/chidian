@@ -122,7 +122,7 @@ class TestViewValidation:
         
     def test_type_validation(self):
         """Test that non-Pydantic models are rejected."""
-        with pytest.raises(TypeError, match="must be a Pydantic BaseModel"):
+        with pytest.raises(TypeError, match="must be a Pydantic v2 BaseModel"):
             View(
                 source_model=dict,  # Not a Pydantic model
                 target_model=BaseModel,

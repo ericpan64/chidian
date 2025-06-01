@@ -55,10 +55,10 @@ class TestLensBasic:
     
     def test_lens_invalid_models(self):
         """Test lens rejects non-Pydantic models."""
-        with pytest.raises(TypeError, match="source_model must be a Pydantic BaseModel"):
+        with pytest.raises(TypeError, match="source_model must be a Pydantic v2 BaseModel"):
             Lens(dict, Observation, {"id": "subject_ref"})
         
-        with pytest.raises(TypeError, match="target_model must be a Pydantic BaseModel"):
+        with pytest.raises(TypeError, match="target_model must be a Pydantic v2 BaseModel"):
             Lens(Patient, dict, {"id": "subject_ref"})
     
     def test_lens_invalid_mappings(self):

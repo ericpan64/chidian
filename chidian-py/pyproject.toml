@@ -12,7 +12,7 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "pydantic>=2.10.6",
+    "pydantic>=2.10.6,<3.0.0",  # Only Pydantic v2 is supported
 ]
 [tool.maturin]
 features = ["pyo3/extension-module"]
