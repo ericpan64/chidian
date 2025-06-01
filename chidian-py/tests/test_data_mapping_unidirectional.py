@@ -1,14 +1,14 @@
-"""Consolidated tests for the View class."""
+"""Tests for DataMapping in unidirectional mode (formerly View)."""
 
 import pytest
 from pydantic import BaseModel
 from typing import Optional, List
-from chidian.view import View
+from chidian import DataMapping
 import chidian.partials as p
 
 
-class TestViewBasic:
-    """Test basic View functionality."""
+class TestDataMappingUnidirectionalBasic:
+    """Test basic DataMapping functionality in unidirectional mode."""
     
     def test_simple_mapping(self):
         """Test basic field mapping with Pydantic models."""
@@ -20,17 +20,19 @@ class TestViewBasic:
             person_id: str
             display_name: str
             
-        view = View(
+        mapping = DataMapping(
             source_model=Source,
             target_model=Target,
             mapping={
                 'person_id': 'id',
                 'display_name': 'name'
             }
+        ,
+            bidirectional=False
         )
         
         source = Source(id='123', name='John Doe')
-        result = view.forward(source)
+        result = mapping.forward(source)
         
         assert isinstance(result, Target)
         assert result.person_id == '123'
@@ -46,20 +48,22 @@ class TestViewBasic:
             patient_id: str
             value: float
             
-        view = View(
+        mapping = DataMapping(
             source_model=Source,
             target_model=Target,
             mapping={
                 'patient_id': 'subject.reference',
                 'value': 'valueQuantity.value'
             }
+        ,
+            bidirectional=False
         )
         
         source = Source(
             subject={'reference': 'Patient/123'},
             valueQuantity={'value': 140.0, 'unit': 'mmHg'}
         )
-        result = view.forward(source)
+        result = mapping.forward(source)
         
         assert result.patient_id == 'Patient/123'
         assert result.value == 140.0
@@ -74,24 +78,26 @@ class TestViewBasic:
             name_upper: str
             id: int
             
-        view = View(
+        mapping = DataMapping(
             source_model=Source,
             target_model=Target,
             mapping={
                 'name_upper': p.get('name') >> p.upper,
                 'id': p.get('reference') >> p.split('/') >> p.last >> p.to_int
             }
+        ,
+            bidirectional=False
         )
         
         source = Source(name='john doe', reference='Patient/456')
-        result = view.forward(source)
+        result = mapping.forward(source)
         
         assert result.name_upper == 'JOHN DOE'
         assert result.id == 456
 
 
-class TestViewValidation:
-    """Test View validation and error handling."""
+class TestDataMappingUnidirectionalValidation:
+    """Test DataMapping validation and error handling."""
     
     def test_strict_mode_validation(self):
         """Test strict mode enforces required fields."""
@@ -104,7 +110,7 @@ class TestViewValidation:
             
         # Should raise in strict mode
         with pytest.raises(ValueError, match="Missing required target fields"):
-            View(
+            DataMapping(
                 source_model=Source,
                 target_model=Target,
                 mapping={'id': 'id'},
@@ -112,18 +118,20 @@ class TestViewValidation:
             )
             
         # Should work in non-strict mode
-        view = View(
+        mapping = DataMapping(
             source_model=Source,
             target_model=Target,
             mapping={'id': 'id'},
             strict=False
+        ,
+            bidirectional=False
         )
-        assert view.strict is False
+        assert mapping.strict is False
         
     def test_type_validation(self):
         """Test that non-Pydantic models are rejected."""
         with pytest.raises(TypeError, match="must be a Pydantic v2 BaseModel"):
-            View(
+            DataMapping(
                 source_model=dict,  # Not a Pydantic model
                 target_model=BaseModel,
                 mapping={}
@@ -139,7 +147,7 @@ class TestViewValidation:
             error: Optional[str] = None
             
         # Non-strict mode handles errors gracefully
-        view = View(
+        mapping = DataMapping(
             source_model=Source,
             target_model=Target,
             mapping={
@@ -147,16 +155,18 @@ class TestViewValidation:
                 'error': p.ChainableFn(lambda x: 1/0)  # Will raise
             },
             strict=False
+        ,
+            bidirectional=False
         )
         
         source = Source(data={'value': 'test'})
-        result = view.forward(source)
+        result = mapping.forward(source)
         
         assert result.safe == 'test'
         assert result.error is None  # Error was caught
 
 
-class TestViewRealWorld:
+class TestDataMappingUnidirectionalRealWorld:
     """Test real-world transformation scenarios."""
     
     def test_fhir_to_flat_structure(self, fhir_observation):
@@ -174,7 +184,7 @@ class TestViewRealWorld:
             value: Optional[float] = None
             unit: Optional[str] = None
             
-        view = View(
+        mapping = DataMapping(
             source_model=FHIRObservation,
             target_model=FlatObservation,
             mapping={
@@ -184,10 +194,12 @@ class TestViewRealWorld:
                 'value': 'valueQuantity.value',
                 'unit': 'valueQuantity.unit'
             }
+        ,
+            bidirectional=False
         )
         
         source = FHIRObservation(**fhir_observation)
-        result = view.forward(source)
+        result = mapping.forward(source)
         
         assert result.observation_id == 'obs-123'
         assert result.patient_id == '456'

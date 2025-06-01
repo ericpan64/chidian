@@ -3,8 +3,7 @@ from typing import Any, Callable, TypeVar, Generic, Type, Union, Tuple, Optional
 from .seeds import SEED, DROP, KEEP, DropLevel
 
 if TYPE_CHECKING:
-    from .view import View
-    from .lens import Lens
+    from .data_mapping import DataMapping
     from .recordset import RecordSet
 
 """
@@ -13,8 +12,8 @@ A unified `Piper` class that handles both typed and untyped transformations.
 As a Piper processes data, it will consume SEEDs and apply them to the data accordingly.
 Uses a two-pass approach: first mapping, then cleanup of DROP/KEEP directives.
 
-For untyped (dict-to-dict) transformations, pass None for both source_type and target_type,
-or pass dict as the types for more intuitive usage.
+For untyped (dict-to-dict) transformations, pass dict as both source_type and target_type.
+For typed transformations, use a DataMapping instance.
 """
 
 # Type variables for generic typing
@@ -25,7 +24,7 @@ OutputT = TypeVar('OutputT')
 class Piper(Generic[InputT, OutputT]):
     def __init__(
         self,
-        transformer: Union[Callable[[InputT], OutputT], Callable[[dict[str, Any]], dict[str, Any]], 'View', 'Lens'],
+        transformer: Union[Callable[[InputT], OutputT], Callable[[dict[str, Any]], dict[str, Any]], 'DataMapping'],
         source_type: Optional[Type[InputT]] = None,
         target_type: Optional[Type[OutputT]] = None,
         remove_empty: bool = False,
@@ -37,35 +36,35 @@ class Piper(Generic[InputT, OutputT]):
         Args:
             transformer: Can be:
                 - A callable for dict-to-dict mappings
-                - A View or Lens for typed transformations
+                - A DataMapping for typed transformations
                 - Any callable for custom transformations
             source_type: Source type (None or dict for untyped, specific type for validation)
             target_type: Target type (None or dict for untyped, specific type for validation)
             remove_empty: Whether to remove empty containers (only for dict mode)
-            strict: Whether to enforce type validation (inherits from View/Lens if applicable)
+            strict: Whether to enforce type validation (inherits from DataMapping if applicable)
         """
         # Import here to avoid circular imports
-        from .view import View
-        from .lens import Lens
+        from .data_mapping import DataMapping
         
         self.transformer = transformer
         self.remove_empty = remove_empty
         
         # Determine mode and settings based on transformer type
-        if isinstance(transformer, (View, Lens)):
-            # Typed transformation with View or Lens
+        if isinstance(transformer, DataMapping):
+            # Typed transformation with DataMapping
             self.source_type = transformer.source_model
             self.target_type = transformer.target_model
             # Compatibility aliases
             self.input_type = self.source_type
             self.output_type = self.target_type
             self.strict = transformer.strict if strict is None else strict
-            self._mode = "lens" if isinstance(transformer, Lens) else "view"
+            
+            self._mode = "lens" if transformer.bidirectional else "view"
         else:
             # Dict mode - only supported mode for plain callables
             if source_type is not dict or target_type is not dict:
                 raise ValueError(
-                    "Piper only supports dict-to-dict transformations or View/Lens objects. "
+                    "Piper only supports dict-to-dict transformations or DataMapping objects. "
                     "For dict transformations, use source_type=dict, target_type=dict."
                 )
             
@@ -112,7 +111,7 @@ class Piper(Generic[InputT, OutputT]):
             return processed_data
             
         else:
-            # View or Lens mode - delegate to transformer
+            # DataMapping mode - delegate to transformer
             return self.transformer.forward(data)
     
     def forward(self, data: InputT) -> Union[OutputT, Tuple[OutputT, 'RecordSet']]:
@@ -120,9 +119,9 @@ class Piper(Generic[InputT, OutputT]):
         return self.run(data)
     
     def reverse(self, output_data: OutputT, spillover: 'RecordSet' = None) -> InputT:
-        """Apply reverse transformation (only available for Lens)."""
+        """Apply reverse transformation (only available for bidirectional DataMapping/Lens)."""
         if self._mode != "lens":
-            raise ValueError("Reverse transformation only available for Lens")
+            raise ValueError("Reverse transformation only available for bidirectional mappings")
         
         # Import here to avoid circular imports
         from .recordset import RecordSet
@@ -130,7 +129,7 @@ class Piper(Generic[InputT, OutputT]):
     
     def can_reverse(self) -> bool:
         """Check if this piper supports reverse transformation."""
-        return self._mode == "lens" and self.transformer.can_reverse()
+        return self._mode == "lens" and hasattr(self.transformer, 'can_reverse') and self.transformer.can_reverse()
     
     def __call__(self, data: InputT) -> Union[OutputT, Tuple[OutputT, 'RecordSet']]:
         """Make Piper callable."""
