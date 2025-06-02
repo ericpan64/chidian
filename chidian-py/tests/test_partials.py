@@ -230,10 +230,8 @@ def test_function_chain_repr():
 # Tests for new partials that replaced SEEDs
 def test_case_partial():
     """Test case partial function."""
-    from chidian import case
-    
     # Test with dict cases
-    status_mapper = case({
+    status_mapper = p.case({
         "active": "✓ Active",
         "inactive": "✗ Inactive"
     }, default="Unknown")
@@ -243,7 +241,7 @@ def test_case_partial():
     assert status_mapper("pending") == "Unknown"
     
     # Test with function cases
-    range_mapper = case([
+    range_mapper = p.case([
         (lambda x: x > 100, "HIGH"),
         (lambda x: x > 50, "MEDIUM"),
         (lambda x: x >= 0, "LOW")
@@ -255,10 +253,9 @@ def test_case_partial():
     assert range_mapper(-10) == "INVALID"
 
 
-def test_first_non_empty_partial():
-    """Test first_non_empty partial function."""
-    from chidian import first_non_empty
-    
+def test_coalesce_partial():
+    """Test coalesce partial function."""
+
     data = {
         "missing": None,
         "empty": "",
@@ -267,28 +264,26 @@ def test_first_non_empty_partial():
     }
     
     # Test with multiple paths
-    coalesce = first_non_empty("missing", "empty", "value", default="DEFAULT")
-    assert coalesce(data) == "found"
+    coalesce_found_key = p.coalesce("missing", "empty", "value", default="DEFAULT")
+    assert coalesce_found_key(data) == "found"
     
     # Test with all None/empty
-    coalesce_empty = first_non_empty("missing", "empty", default="DEFAULT")
+    coalesce_empty = p.coalesce("missing", "empty", default="DEFAULT")
     assert coalesce_empty(data) == "DEFAULT"
     
     # Test without default
-    coalesce_no_default = first_non_empty("value", "backup")
+    coalesce_no_default = p.coalesce("value", "backup")
     assert coalesce_no_default(data) == "found"
 
 
 def test_template_partial():
     """Test template partial function."""
-    from chidian import template
-    
     # Basic template
-    name_template = template("{} {}")
+    name_template = p.template("{} {}")
     assert name_template("John", "Doe") == "John Doe"
     
     # Template with skip_none
-    full_template = template("{} {} {}", skip_none=True)
+    full_template = p.template("{} {} {}", skip_none=True)
     assert full_template("John", None, "Doe") == "John Doe"
     assert full_template("John", "Middle", "Doe") == "John Middle Doe"
     assert full_template(None, None, None) == ""
@@ -296,8 +291,6 @@ def test_template_partial():
 
 def test_flatten_partial():
     """Test flatten partial function."""
-    from chidian import flatten
-    
     data = {
         "names": ["John", "Jane"],
         "ids": ["123", "456"],
@@ -306,30 +299,28 @@ def test_flatten_partial():
     }
     
     # Test basic flatten
-    flatten_func = flatten(["names", "ids"])
+    flatten_func = p.flatten(["names", "ids"])
     result = flatten_func(data)
     assert result == "John, Jane, 123, 456"
     
     # Test custom delimiter
-    flatten_pipe = flatten(["names"], delimiter=" | ")
+    flatten_pipe = p.flatten(["names"], delimiter=" | ")
     assert flatten_pipe(data) == "John | Jane"
     
     # Test with empty and single values
-    flatten_mixed = flatten(["names", "empty", "single"])
+    flatten_mixed = p.flatten(["names", "empty", "single"])
     assert flatten_mixed(data) == "John, Jane, solo"
 
 
 def test_partials_integration_with_chains():
     """Test that new partials work with function chains."""
-    from chidian import case, first_non_empty, template
-    
     # Chain case with other operations
-    status_chain = p.get("status") >> case({"1": "active", "0": "inactive"}, default="unknown") >> p.upper
+    status_chain = p.get("status") >> p.case({"1": "active", "0": "inactive"}, default="unknown") >> p.upper
     data = {"status": "1"}
     assert status_chain(data) == "ACTIVE"
     
     # Use template in a complex chain
-    format_name = template("{} {}")
+    format_name = p.template("{} {}")
     name_chain = p.ChainableFn(lambda data: format_name(
         p.get("first")(data),
         p.get("last")(data)

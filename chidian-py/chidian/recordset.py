@@ -1,10 +1,7 @@
 import json
 from typing import Any, Callable, Union, Optional, Iterator
-from collections.abc import Iterable
 
-# import pyarrow as pa
-
-from . import get as get_rs
+from .chidian_rs import get
 
 """
 A `RecordSet` is aconvenient wrapper around dict[str, dict] for managing collections of dictionary data.
@@ -26,6 +23,8 @@ class RecordSet(dict):
             items: Either a list of dicts (auto-keyed by index) or a dict of dicts
             **kwargs: Additional dict initialization parameters
         """
+        # TODO: does the `self._items` field need to exist -- i.e. could this just be referenced later as `self.values()`? 
+        #       So don't need the middle abstraction then
         super().__init__(**kwargs)
         self._items: list[dict[str, Any]] = []
         
@@ -44,7 +43,7 @@ class RecordSet(dict):
     
     def get_all(self, path: str, default: Any = None, apply: Optional[Callable] = None, strict: bool = False) -> list:
         """
-        Apply get_rs to extract a path from all items in the collection.
+        Apply get to extract a path from all items in the collection.
         
         Examples:
             collection.get_all("patient.id")      # Get patient.id from all items
@@ -62,12 +61,14 @@ class RecordSet(dict):
         """
         results = []
         for item in self._items:
-            value = get_rs(item, path, default=default, apply=apply, strict=strict)
+            value = get(item, path, default=default, apply=apply, strict=strict)
             results.append(value)
         return results
     
     def select(self, fields: str = "*", where: Optional[Callable[[dict], bool]] = None, flat: bool = False, sparse: str = "preserve"):
         """
+        # TODO: Use the PEG grammar instead of custom parsing (refer to old `pydian` impl which is in separate repo)
+
         Select fields from the collection with optional filtering and sparse data handling.
         
         Examples:
@@ -89,6 +90,7 @@ class RecordSet(dict):
         Returns:
             RecordSet with query results, or list if flat=True
         """
+        # TODO: This function is way too big (though understandably so)... split this up into parsing step + execution functions
         # Parse field specification
         if fields == "*":
             field_list = None  # Keep all fields
@@ -116,7 +118,7 @@ class RecordSet(dict):
             elif isinstance(field_list, tuple) and field_list[0] == "wildcard":
                 # Handle "nested.*" syntax
                 nested_path = field_list[1]
-                nested_obj = get_rs(item, nested_path, default=None)
+                nested_obj = get(item, nested_path, default=None)
                 
                 if sparse == "preserve":
                     # Always include, even if None or empty
@@ -132,7 +134,7 @@ class RecordSet(dict):
                         continue
             elif len(field_list) == 1 and flat:
                 # Single field with flat=True - collect for flat list
-                value = get_rs(item, field_list[0], default=None)
+                value = get(item, field_list[0], default=None)
                 if sparse == "preserve":
                     # Include even if None
                     result_items.append(value)
@@ -144,7 +146,7 @@ class RecordSet(dict):
                 # Multiple specific fields
                 result_item = {}
                 for field in field_list:
-                    value = get_rs(item, field, default=None)
+                    value = get(item, field, default=None)
                     key_name = field.split(".")[-1] if "." in field else field
                     
                     if sparse == "preserve":
@@ -291,31 +293,7 @@ class RecordSet(dict):
     def __len__(self) -> int:
         """Return number of items in collection."""
         return len(self._items)
-    
-    # def to_table(self) -> pa.Table:
-    #     """
-    #     Converts the collection to a PyArrow table. 
-    #     Flattens nested structures into columns.
-    #     """
-    #     import pyarrow as pa
-    #     
-    #     # Collect all unique paths
-    #     all_paths = set()
-    #     for item in self._items:
-    #         paths = self._extract_paths(item)
-    #         all_paths.update(paths)
-    #     
-    #     # Build columns
-    #     columns = {}
-    #     for path in sorted(all_paths):
-    #         values = []
-    #         for item in self._items:
-    #             value = get_rs(item, path)
-    #             values.append(value)
-    #         columns[path.replace(".", "_")] = values
-    #     
-    #     return pa.table(columns)
-    
+
     def _extract_paths(self, obj: Any, prefix: str = "") -> set[str]:
         """Extract all paths from a nested dict."""
         paths = set()

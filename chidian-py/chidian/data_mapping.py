@@ -6,6 +6,7 @@ from typing import Any, Optional, Type, TypeVar, Tuple, Union, Callable
 from pydantic import BaseModel
 from .recordset import RecordSet
 from .lib import put
+from .chidian_rs import get
 
 # Type variables for generic models
 SourceT = TypeVar('SourceT', bound=BaseModel)
@@ -25,7 +26,7 @@ class DataMapping:
         self,
         source_model: Type[SourceT],
         target_model: Type[TargetT], 
-        mapping: Union[Callable[[dict], dict], dict[str, Any]],
+        mapping: dict[str, str | Callable],  # TODO: updated this to be more constraining, update tests accordingly
         bidirectional: bool = False,
         strict: bool = True,
         metadata: Optional[dict] = None
@@ -54,14 +55,7 @@ class DataMapping:
         self.bidirectional = bidirectional
         self.strict = strict
         self.metadata = metadata or {}
-        
-        # Import dependencies
-        from .chidian_rs import get as _get
-        from .partials import FunctionChain, ChainableFn
-        self._get = _get
-        self._function_chain = FunctionChain
-        self._chainable_fn = ChainableFn
-        
+
         # Validate mapping type based on mode
         if self.bidirectional:
             # Bidirectional mode requires dict mappings for reversibility
@@ -118,13 +112,14 @@ class DataMapping:
         # Convert to dict for processing
         source_dict = source.model_dump() if hasattr(source, 'model_dump') else source
         
+        # TODO: split this into separate functions (clean code)
         if self.bidirectional:
             # Bidirectional mode - simple path mappings with spillover tracking
             target_data = {}
             mapped_paths = set()
             
             for source_path, target_path in self.mapping.items():
-                value = self._get(source_dict, source_path)
+                value = get(source_dict, source_path)
                 if value is not None:
                     target_data = put(target_data, target_path, value, strict=False)
                     mapped_paths.add(source_path)
@@ -193,7 +188,7 @@ class DataMapping:
         # Apply reverse mappings
         source_data = {}
         for target_path, source_path in self._reverse_mappings.items():
-            value = self._get(target_dict, target_path)
+            value = get(target_dict, target_path)
             if value is not None:
                 source_data = put(source_data, source_path, value, strict=False)
         
@@ -224,7 +219,7 @@ class DataMapping:
         """Process a single mapping specification (unidirectional mode)."""
         # String path - use get
         if isinstance(mapping_spec, str):
-            return self._get(source, mapping_spec)
+            return get(source, mapping_spec)
         
         # FunctionChain or ChainableFn
         elif hasattr(mapping_spec, '__call__'):

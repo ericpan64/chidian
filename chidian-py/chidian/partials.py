@@ -88,6 +88,7 @@ def add(value: Any, before: bool = False) -> Callable[[Any], Any]:
     if before:
         return partial(operator.add, value)
     else:
+        # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
         return lambda x: operator.add(x, value)
 
 
@@ -96,6 +97,7 @@ def subtract(value: Any, before: bool = False) -> Callable[[Any], Any]:
     if before:
         return partial(operator.sub, value)
     else:
+        # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
         return lambda x: operator.sub(x, value)
 
 
@@ -104,6 +106,7 @@ def multiply(value: Any, before: bool = False) -> Callable[[Any], Any]:
     if before:
         return partial(operator.mul, value)
     else:
+        # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
         return lambda x: operator.mul(x, value)
 
 
@@ -112,6 +115,7 @@ def divide(value: Any, before: bool = False) -> Callable[[Any], Any]:
     if before:
         return partial(operator.truediv, value)
     else:
+        # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
         return lambda x: operator.truediv(x, value)
 
 
@@ -138,48 +142,57 @@ def not_equivalent(value: Any) -> Callable[[Any], bool]:
 
 def contains(value: Any) -> Callable[[Any], bool]:
     """Check if input contains the given value."""
+    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return lambda x: operator.contains(x, value)
 
 
 def not_contains(value: Any) -> Callable[[Any], bool]:
     """Check if input does not contain the given value."""
+    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return lambda x: not operator.contains(x, value)
 
 
 def contained_in(container: Any) -> Callable[[Any], bool]:
     """Check if input is contained in the given container."""
+    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return lambda x: operator.contains(container, x)
 
 
 def not_contained_in(container: Any) -> Callable[[Any], bool]:
     """Check if input is not contained in the given container."""
+    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return lambda x: not operator.contains(container, x)
 
 
 def isinstance_of(type_or_types: type) -> Callable[[Any], bool]:
     """Check if input is an instance of the given type(s)."""
+    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return lambda x: isinstance(x, type_or_types)
 
 
 # Iterable operations using operator module
 def keep(n: int) -> Callable[[Iterable[T]], Iterable[T]]:
     """Keep only the first n items from an iterable."""
+    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return lambda x: x[:n]
 
 
 def index(i: int) -> Callable[[Iterable[T]], T]:
     """Get the item at index i from an iterable."""
+    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return lambda x: operator.getitem(x, i)
 
 
 # Standard library wrappers
 def map_to_list(func: Callable[[T], Any]) -> Callable[[Iterable[T]], list]:
     """Apply a function to each item in an iterable and return a list."""
+    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return lambda iterable: list(map(func, iterable))
 
 
 def filter_to_list(predicate: Callable[[T], bool]) -> Callable[[Iterable[T]], list]:
     """Filter an iterable using a predicate and return a list."""
+    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return lambda iterable: list(filter(predicate, iterable))
 
 
@@ -197,11 +210,13 @@ def split(sep: str = None) -> ChainableFn:
 
 def replace(old: str, new: str) -> ChainableFn:
     """Create a chainable replace function."""
+    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return ChainableFn(lambda s: s.replace(old, new))
 
 
 def join(sep: str) -> ChainableFn:
     """Create a chainable join function."""
+    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return ChainableFn(lambda items: sep.join(items))
 
 
@@ -213,11 +228,13 @@ length = ChainableFn(len)
 
 def at_index(i: int) -> ChainableFn:
     """Get element at index."""
+    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return ChainableFn(lambda x: x[i] if len(x) > i else None)
 
 
 def slice_range(start: int = None, end: int = None) -> ChainableFn:
     """Slice a sequence."""
+    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return ChainableFn(lambda x: x[start:end])
 
 
@@ -236,16 +253,19 @@ def round_to(decimals: int) -> ChainableFn:
 
 def default_to(default_value: Any) -> ChainableFn:
     """Replace None with default value."""
+    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return ChainableFn(lambda x: default_value if x is None else x)
 
 
 def extract_id() -> ChainableFn:
     """Extract ID from FHIR reference (e.g., 'Patient/123' -> '123')."""
+    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return ChainableFn(lambda ref: ref.split('/')[-1] if '/' in str(ref) else ref)
 
 
 def format_string(template: str) -> ChainableFn:
     """Format value into a string template."""
+    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return ChainableFn(lambda x: template.format(x))
 
 
@@ -282,7 +302,7 @@ def case(cases: dict[Any, Any] | list[tuple[Any, Any]], default: Any = None) -> 
     return ChainableFn(case_matcher)
 
 
-def first_non_empty(*paths: str, default: Any = None) -> Callable[[Any], Any]:
+def coalesce(*paths: str, default: Any = None) -> Callable[[Any], Any]:
     """Grab first non-empty value from multiple paths.
     
     Args:
@@ -328,7 +348,7 @@ def template(template_str: str, skip_none: bool = False) -> Callable[..., str]:
     return template_formatter
 
 
-def flatten_paths(paths: list[str], delimiter: str = ", ") -> Callable[[Any], str]:
+def flatten(paths: list[str], delimiter: str = ", ") -> Callable[[Any], str]:
     """Flatten values from multiple paths into a single delimited string.
     
     Args:
@@ -349,7 +369,3 @@ def flatten_paths(paths: list[str], delimiter: str = ", ") -> Callable[[Any], st
         return delimiter.join(all_values)
     
     return flatten_func
-
-
-# Convenience alias for flatten_paths
-flatten = flatten_paths

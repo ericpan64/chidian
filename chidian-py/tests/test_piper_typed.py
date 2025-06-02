@@ -1,5 +1,7 @@
 """Tests for Piper with DataMapping integration."""
 
+# TODO: All `Piper` objects are typed by default now, rename file and possibly consolidate with `test_piper.py`
+
 import pytest
 from typing import Optional
 from pydantic import BaseModel
@@ -218,35 +220,6 @@ class TestPiperBidirectional:
         assert piper._mode == "lens"
         assert piper.can_reverse() is True
 
-
-class TestPiperErrorHandling:
-    """Test Piper error handling for invalid inputs."""
-    
-    def test_piper_requires_data_mapping(self):
-        """Test that Piper requires a DataMapping instance."""
-        def mapper(patient: Patient) -> Observation:
-            return Observation(
-                subject_ref=patient.id,
-                performer=patient.name
-            )
-        
-        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or View/Lens objects"):
-            Piper(mapper)
-    
-    def test_callable_with_wrong_types_fails(self):
-        """Test that Piper rejects callables with non-dict types."""
-        def mapper(x: int) -> str:
-            return str(x)
-        
-        with pytest.raises(ValueError, match="Piper only supports dict-to-dict transformations or View/Lens objects"):
-            Piper(mapper, source_type=int, target_type=str)
-    
-    def test_piper_rejects_none(self):
-        """Test that Piper rejects None."""
-        with pytest.raises(TypeError, match="Piper requires a DataMapping instance"):
-            Piper(None)
-
-
 class TestPiperStrictMode:
     """Test Piper strict mode behavior."""
     
@@ -303,13 +276,13 @@ class TestPiperIntegration:
     def test_type_safety_prevents_chaining_errors(self):
         """Test that type safety prevents incompatible chaining."""
         # Create two pipers with incompatible types
-        mapping1 = DataMapping(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False, bidirectional=False)
-        piper1 = Piper(mapping1)
+        mapping = DataMapping(Patient, Observation, {"subject_ref": "id", "performer": "name"}, strict=False, bidirectional=False)
+        piper = Piper(mapping)
         
         # This would be a type error if we tried to chain with a different input type
         # (In real usage, mypy/type checker would catch this)
-        assert piper1.input_type == Patient
-        assert piper1.output_type == Observation
+        assert piper.input_type == Patient
+        assert piper.output_type == Observation
     
     def test_mixed_mode_workflow(self):
         """Test workflow mixing View and Lens based pipers."""

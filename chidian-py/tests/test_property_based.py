@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given, strategies as st
 from typing import Any, Dict
 
-from chidian import get, template, first_non_empty, flatten, case
+from chidian import get
 import chidian.partials as p
 
 
@@ -68,7 +68,7 @@ class TestPropertyBasedCore:
     @given(st.text(max_size=50), st.text(max_size=50))
     def test_template_formatting(self, value1, value2):
         """Test that template always returns a string."""
-        template_func = template("{} {}")
+        template_func = p.template("{} {}")
         result = template_func(value1, value2)
         assert isinstance(result, str)
         # Values should appear in result (as strings)
@@ -76,8 +76,8 @@ class TestPropertyBasedCore:
         assert str(value2) in result
 
     @given(st.lists(st.text(alphabet=st.characters(whitelist_categories=('Ll', 'Lu')), min_size=1, max_size=8), min_size=1, max_size=3))
-    def test_first_non_empty_returns_value(self, path_names):
-        """Test that first_non_empty always returns something."""
+    def test_coalesce_returns_value(self, path_names):
+        """Test that coalesce always returns something."""
         # Filter out empty strings
         valid_paths = [p for p in path_names if p]
         if not valid_paths:
@@ -86,7 +86,7 @@ class TestPropertyBasedCore:
         # Create data with at least one non-empty value
         data = {valid_paths[0]: "found_value"}
         
-        coalesce = first_non_empty(*valid_paths, default="DEFAULT")
+        coalesce = p.coalesce(*valid_paths, default="DEFAULT")
         result = coalesce(data)
         
         # Should return either the found value or the default
@@ -103,7 +103,7 @@ class TestPropertyBasedCore:
         # Create data with lists for each path
         data = {path: [f"value_{i}" for i in range(2)] for path in valid_paths}
         
-        flatten_func = flatten(valid_paths, delimiter=", ")
+        flatten_func = p.flatten(valid_paths, delimiter=", ")
         result = flatten_func(data)
         
         assert isinstance(result, str)
@@ -118,7 +118,7 @@ class TestPropertyBasedCore:
         test_key = list(cases.keys())[0]
         expected_value = cases[test_key]
         
-        case_func = case(cases, default="DEFAULT")
+        case_func = p.case(cases, default="DEFAULT")
         
         # Should return the expected value for exact match
         result = case_func(test_key)
@@ -193,7 +193,7 @@ class TestPropertyBasedRobustness:
         """Test flatten with various path combinations."""
         # Should not crash even with empty or invalid paths
         try:
-            flatten_func = flatten(paths, delimiter=", ")
+            flatten_func = p.flatten(paths, delimiter=", ")
             result = flatten_func({})
             assert isinstance(result, str)
         except Exception:

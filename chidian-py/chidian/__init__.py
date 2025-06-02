@@ -4,7 +4,7 @@ from .recordset import RecordSet
 from .piper import Piper
 from .data_mapping import DataMapping
 from .seeds import DROP, KEEP
-from .partials import FunctionChain, ChainableFn, case, first_non_empty, template, flatten
+from .partials import FunctionChain, ChainableFn
 
 __all__ = [
     "get",
@@ -16,8 +16,4 @@ __all__ = [
     "KEEP",
     "FunctionChain",
     "ChainableFn",
-    "case",
-    "first_non_empty",
-    "template",
-    "flatten",
 ]

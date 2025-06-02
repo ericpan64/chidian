@@ -1,13 +1,17 @@
 """
 Strongly typed classes for testing.
 
-Note: these are just used in the tests. And the `confest.py` returns weaker types intentionally
+NOTE: these are just used in the tests. And the `confest.py` returns weaker types intentionally
     These stronger classes are used for the `Piper` class
 """
 
 from pydantic import BaseModel
 from typing import Any
 
+# TODO: This would be a good place to define an area of shared structs used across test files ()
+#       ... maybe this could be some OMOP<>FHIR mappings... I guess why not? Makes it easier to reason about too with concrete example
+
+# TODO: Add `A` and `B` classes... can be centering example
 
 class SimpleMessage(BaseModel):
     msg: str

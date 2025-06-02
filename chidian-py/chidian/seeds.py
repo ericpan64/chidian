@@ -8,12 +8,6 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any, TypeAlias
 
-
-ApplyFunc: TypeAlias = Callable[[Any], Any]
-ConditionalCheck: TypeAlias = Callable[[Any], bool]
-MappingFunc: TypeAlias = Callable[..., dict[str, Any]]
-
-
 class SEED(ABC):
     """Base class for all SEED objects.
     
@@ -35,7 +29,7 @@ class SEED(ABC):
         """
         pass
 
-
+# TODO: Along with note in `DROP` -- could this be removed and consolidated?
 class DropLevel(Enum):
     """
     A DROP placeholder object indicates the object relative to the current value should be dropped. 
@@ -78,6 +72,9 @@ class DROP(SEED):
     An "object" in this context is a dict or a list.
     """
     
+    # TODO: Is there a way to have this be `DROP.THIS_OBJECT` as the object in the code
+    #       E.g. originally it was `class DROP(Enum)` so this wasn't an issue, maybe this should be
+    #       update to be `class DROP(Enum, SEED)`? Be an enum that implements `process`
     # Class-level constants for common drop levels
     THIS_OBJECT = DropLevel.THIS_OBJECT
     PARENT = DropLevel.PARENT
@@ -90,30 +87,6 @@ class DROP(SEED):
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         """DROP seeds are processed by Piper, not directly."""
         return self
-    
-    @classmethod
-    def this_object(cls) -> 'DROP':
-        return cls(DropLevel.THIS_OBJECT)
-    
-    @classmethod
-    def parent(cls) -> 'DROP':
-        return cls(DropLevel.PARENT)
-    
-    @classmethod
-    def grandparent(cls) -> 'DROP':
-        return cls(DropLevel.GRANDPARENT)
-    
-    @classmethod
-    def greatgrandparent(cls) -> 'DROP':
-        return cls(DropLevel.GREATGRANDPARENT)
-
-
-# Create module-level constants for backward compatibility
-DROP.THIS_OBJECT = DROP.this_object()
-DROP.PARENT = DROP.parent()
-DROP.GRANDPARENT = DROP.grandparent()
-DROP.GREATGRANDPARENT = DROP.greatgrandparent()
-
 
 class KEEP(SEED):
     """

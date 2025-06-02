@@ -4,10 +4,8 @@ from typing import Any, Optional
 import pytest
 from pydantic import BaseModel
 
-from chidian import get, Piper, DataMapping, template, case, first_non_empty, flatten
+from chidian import get, Piper, DataMapping
 import chidian.partials as p
-from chidian.seeds import DROP, KEEP
-
 
 # Test models for the new API
 class SourceData(BaseModel):
@@ -67,8 +65,8 @@ class TestPiper:
         
         def mapper(data: dict) -> dict:
             # Use new partials API
-            name_template = template("{} {}")
-            status_classifier = p.get("status") >> case({
+            name_template = p.template("{} {}")
+            status_classifier = p.get("status") >> p.case({
                 "active": "✓ Active",
                 "inactive": "✗ Inactive"
             }, default="Unknown")
@@ -77,9 +75,9 @@ class TestPiper:
             return {
                 "name": name_template(get(data, "firstName"), get(data, "lastName")),
                 "status_display": status_classifier(data),
-                "all_codes": flatten(["codes"], delimiter=", ")(data),
+                "all_codes": p.flatten(["codes"], delimiter=", ")(data),
                 "city": city_extractor(data),
-                "backup_name": first_non_empty("nickname", "firstName", default="Guest")(data)
+                "backup_name": p.coalesce("nickname", "firstName", default="Guest")(data)
             }
             
         data_mapping = DataMapping(PersonSource, PersonTarget, mapper)
@@ -92,16 +90,3 @@ class TestPiper:
         assert result.all_codes == "A, B, C"
         assert result.city == "Boston"
         assert result.backup_name == "John"
-
-
-# Commenting out SEED-based tests since SEED processing is now handled within 
-# DataMapping callable mappings rather than by Piper
-# class TestPiperConditional:
-#     """Test conditional logic in Piper."""
-
-# TODO: Update remaining tests to use new DataMapping API
-# The following tests need to be updated to use DataMapping with callable mappings
-# instead of the old dict-to-dict Piper mode:
-# - SEED operations (DROP, KEEP) should be handled within the mapping function
-# - Complex transformations should use DataMapping with Pydantic models
-# - Integration tests should be refactored to use the new API

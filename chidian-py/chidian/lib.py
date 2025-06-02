@@ -3,7 +3,7 @@ import re
 from copy import deepcopy
 
 
-def put(target: Union[dict[str, Any], None], path: str, value: Any, strict: bool = False) -> dict[str, Any]:
+def put(target: dict[str, Any], path: str, value: Any, strict: bool = False) -> dict[str, Any]:
     """
     Set a value at a specific path in a nested dictionary structure.
     
@@ -30,17 +30,8 @@ def put(target: Union[dict[str, Any], None], path: str, value: Any, strict: bool
         {'patient': {'name': 'John', 'id': '123'}}
     """
     # Create a deep copy to avoid mutating the original
-    if target is None:
-        result = {}
-    elif isinstance(target, dict):
-        result = deepcopy(target)
-    else:
-        # We only support dict at root level
-        if strict:
-            raise ValueError(f"Target must be a dict, got {type(target).__name__}")
-        else:
-            return {}
-    
+    result = deepcopy(target)
+
     # Parse the path into segments
     segments = _parse_put_path(path)
     
@@ -54,6 +45,7 @@ def put(target: Union[dict[str, Any], None], path: str, value: Any, strict: bool
     # Navigate to the target location, creating structure as needed
     current = result
     
+    # TODO: This section is way too big, think through way to consolidate this and break it down
     for i, segment in enumerate(segments[:-1]):
         if segment["type"] == "key":
             key = segment["value"]
