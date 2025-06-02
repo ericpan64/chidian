@@ -22,4 +22,5 @@ python-source = "."
 dev = [
     "pytest>=8.3.5",
     "hypothesis>=6.0.0",
+    "ruff>=0.11.12",
 ]
