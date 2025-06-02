@@ -1,5 +1,5 @@
 import json
-from typing import Any, Callable, Union, Optional, Iterator
+from typing import Any, Callable, Iterator, Optional, Union
 
 from .chidian_rs import get
 
@@ -13,21 +13,26 @@ allowing users to work with collections semantically without worrying about keys
 
 Supports path-based queries, filtering, mapping, and other functional operations.
 """
-class RecordSet(dict):
 
-    def __init__(self, items: Union[list[dict[str, Any]], dict[str, dict[str, Any]], None] = None, **kwargs):
+
+class RecordSet(dict):
+    def __init__(
+        self,
+        items: Union[list[dict[str, Any]], dict[str, dict[str, Any]], None] = None,
+        **kwargs,
+    ):
         """
         Initialize a RecordSet from a list or dict of dictionaries.
-        
+
         Args:
             items: Either a list of dicts (auto-keyed by index) or a dict of dicts
             **kwargs: Additional dict initialization parameters
         """
-        # TODO: does the `self._items` field need to exist -- i.e. could this just be referenced later as `self.values()`? 
+        # TODO: does the `self._items` field need to exist -- i.e. could this just be referenced later as `self.values()`?
         #       So don't need the middle abstraction then
         super().__init__(**kwargs)
         self._items: list[dict[str, Any]] = []
-        
+
         # Initialize items based on input type
         if items is not None:
             if isinstance(items, list):
@@ -40,22 +45,28 @@ class RecordSet(dict):
                 # Store items by their original keys
                 for key, item in items.items():
                     self[key] = item
-    
-    def get_all(self, path: str, default: Any = None, apply: Optional[Callable] = None, strict: bool = False) -> list:
+
+    def get_all(
+        self,
+        path: str,
+        default: Any = None,
+        apply: Optional[Callable] = None,
+        strict: bool = False,
+    ) -> list:
         """
         Apply get to extract a path from all items in the collection.
-        
+
         Examples:
             collection.get_all("patient.id")      # Get patient.id from all items
             collection.get_all("name")             # Get name from all items
             collection.get_all("status", default="unknown")  # With default
-        
+
         Args:
             path: Path to extract from each item
             default: Default value for items missing this path
             apply: Optional transform function to apply to each result
             strict: If True, raise errors instead of returning default
-            
+
         Returns:
             List of extracted values (one per item)
         """
@@ -64,13 +75,19 @@ class RecordSet(dict):
             value = get(item, path, default=default, apply=apply, strict=strict)
             results.append(value)
         return results
-    
-    def select(self, fields: str = "*", where: Optional[Callable[[dict], bool]] = None, flat: bool = False, sparse: str = "preserve"):
+
+    def select(
+        self,
+        fields: str = "*",
+        where: Optional[Callable[[dict], bool]] = None,
+        flat: bool = False,
+        sparse: str = "preserve",
+    ):
         """
         # TODO: Use the PEG grammar instead of custom parsing (refer to old `pydian` impl which is in separate repo)
 
         Select fields from the collection with optional filtering and sparse data handling.
-        
+
         Examples:
             collection.select("name, age")                    # Select specific fields, None for missing
             collection.select("patient.name, patient.id")     # Nested paths
@@ -78,7 +95,7 @@ class RecordSet(dict):
             collection.select("*", where=lambda x: x.get("active") is not None)
             collection.select("name", flat=True)              # Return flat list
             collection.select("patient.id", sparse="filter")  # Filter out items with None values
-            
+
         Args:
             fields: Field specification ("*", "field1, field2", "nested.*")
             where: Optional filter predicate
@@ -86,12 +103,13 @@ class RecordSet(dict):
             sparse: How to handle missing values ("preserve", "filter")
                    - "preserve": Keep items with None values (default for structure preservation)
                    - "filter": Remove items/fields with None values (default for aggregations)
-            
+
         Returns:
             RecordSet with query results, or list if flat=True
         """
         # TODO: This function is way too big (though understandably so)... split this up into parsing step + execution functions
         # Parse field specification
+        field_list: tuple[str, str] | list[str] | None
         if fields == "*":
             field_list = None  # Keep all fields
         elif ".*" in fields:
@@ -101,16 +119,16 @@ class RecordSet(dict):
         else:
             # Parse comma-separated fields
             field_list = [f.strip() for f in fields.split(",")]
-        
+
         # Process each item
         result_items = []
         result_keys = []
-        
+
         for i, item in enumerate(self._items):
             # Apply filter if provided
             if where is not None and not where(item):
                 continue
-                
+
             # Extract fields based on specification
             if field_list is None:
                 # Keep all fields (*)
@@ -119,13 +137,15 @@ class RecordSet(dict):
                 # Handle "nested.*" syntax
                 nested_path = field_list[1]
                 nested_obj = get(item, nested_path, default=None)
-                
+
                 if sparse == "preserve":
                     # Always include, even if None or empty
                     if isinstance(nested_obj, dict):
                         result_item = nested_obj.copy()
                     else:
-                        result_item = {} if nested_obj is None else {"value": nested_obj}
+                        result_item = (
+                            {} if nested_obj is None else {"value": nested_obj}
+                        )
                 elif sparse == "filter":
                     # Only include if non-empty dict
                     if isinstance(nested_obj, dict) and nested_obj:
@@ -148,20 +168,20 @@ class RecordSet(dict):
                 for field in field_list:
                     value = get(item, field, default=None)
                     key_name = field.split(".")[-1] if "." in field else field
-                    
+
                     if sparse == "preserve":
                         # Always include the field, even if None
                         result_item[key_name] = value
                     elif sparse == "filter" and value is not None:
                         # Only include non-None values
                         result_item[key_name] = value
-                
+
                 # For "filter" mode, skip items with no valid fields
                 if sparse == "filter" and not result_item:
                     continue
-            
+
             result_items.append(result_item)
-            
+
             # Preserve the original key for this item
             original_key = None
             for key, val in self.items():
@@ -169,15 +189,15 @@ class RecordSet(dict):
                     original_key = key
                     break
             result_keys.append(original_key)
-        
+
         # Return based on flat parameter
         if flat and isinstance(field_list, list) and len(field_list) == 1:
             return result_items
-        
+
         # Create new RecordSet preserving structure
         result = RecordSet()
         result._items = result_items
-        
+
         # Preserve original keys
         for i, (item, key) in enumerate(zip(result_items, result_keys)):
             if key is not None:
@@ -190,13 +210,13 @@ class RecordSet(dict):
             else:
                 # Fallback to numeric key
                 result[f"${i}"] = item
-        
+
         return result
 
     def to_json(self, as_list: bool = False, indent: Optional[int] = None) -> str:
         """
         Export collection as JSON string.
-        
+
         Args:
             as_list: Return as array (True) or dict (False)
             indent: Pretty-print indentation
@@ -206,17 +226,17 @@ class RecordSet(dict):
         else:
             # Return as dict with current keys
             return json.dumps(dict(self), indent=indent, default=str)
-    
+
     def append(self, item: dict[str, Any], key: Optional[str] = None) -> None:
         """
         Append an item to the collection (list-like behavior).
-        
+
         Args:
             item: Dictionary to add
             key: Optional key for named access (defaults to $n where n is index)
         """
         self._items.append(item)
-        
+
         if key is None:
             # Use $-prefixed index as key
             key = f"${len(self._items) - 1}"
@@ -224,72 +244,76 @@ class RecordSet(dict):
             # Ensure custom keys start with $
             if not key.startswith("$"):
                 key = f"${key}"
-        
+
         self[key] = item
-    
+
     def filter(self, predicate: Callable[[dict], bool]) -> "RecordSet":
         """
         Filter items based on a predicate function.
-        
+
         Args:
             predicate: Function returning True for items to keep
-            
+
         Returns:
             New filtered RecordSet
         """
         filtered_items = [item for item in self._items if predicate(item)]
-        
+
         # Create new collection with filtered items
         result = RecordSet()
         result._items = filtered_items
-        
+
         # First pass: add all items with numeric keys
         for i, item in enumerate(filtered_items):
             result[f"${i}"] = item
-        
+
         # Second pass: preserve custom keys
         for key, value in self.items():
-            if value in filtered_items and not (key.startswith("$") and key[1:].isdigit()):
+            if value in filtered_items and not (
+                key.startswith("$") and key[1:].isdigit()
+            ):
                 # This is a custom key, preserve it
                 result[key] = value
-        
+
         return result
-    
+
     def map(self, transform: Callable[[dict], dict]) -> "RecordSet":
         """
         Transform each item in the collection.
-        
+
         Args:
             transform: Function to apply to each item
-            
+
         Returns:
             New RecordSet with transformed items
         """
         transformed = [transform(item) for item in self._items]
-        
+
         # Create new collection
         result = RecordSet()
         result._items = transformed
-        
+
         # Map old items to their indices for lookup
         item_to_index = {id(item): i for i, item in enumerate(self._items)}
-        
+
         # First pass: add all items with numeric keys
         for i, item in enumerate(transformed):
             result[f"${i}"] = item
-        
+
         # Second pass: preserve custom keys
         for key, value in self.items():
-            if id(value) in item_to_index and not (key.startswith("$") and key[1:].isdigit()):
+            if id(value) in item_to_index and not (
+                key.startswith("$") and key[1:].isdigit()
+            ):
                 # This is a custom key, preserve it with the transformed item
                 result[key] = transformed[item_to_index[id(value)]]
-        
+
         return result
-    
+
     def __iter__(self) -> Iterator[dict[str, Any]]:
         """Iterate over items in the collection."""
         return iter(self._items)
-    
+
     def __len__(self) -> int:
         """Return number of items in collection."""
         return len(self._items)
@@ -297,17 +321,17 @@ class RecordSet(dict):
     def _extract_paths(self, obj: Any, prefix: str = "") -> set[str]:
         """Extract all paths from a nested dict."""
         paths = set()
-        
+
         if isinstance(obj, dict):
             for key, value in obj.items():
                 new_prefix = f"{prefix}.{key}" if prefix else key
                 paths.add(new_prefix)
-                
+
                 if isinstance(value, (dict, list)):
                     paths.update(self._extract_paths(value, new_prefix))
         elif isinstance(obj, list) and obj:
             # Just handle first item for schema
             if isinstance(obj[0], dict):
                 paths.update(self._extract_paths(obj[0], prefix))
-        
+
         return paths

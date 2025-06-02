@@ -1,12 +1,7 @@
 """Simplified integration tests for core functionality."""
 
-import pytest
-from typing import Any
-
-from chidian import get, Piper, DataMapping
-import chidian.partials as p
+from chidian import get
 from chidian.lib import put
-from chidian.seeds import DROP, KEEP
 
 
 def test_get_function_basic():
@@ -17,16 +12,16 @@ def test_get_function_basic():
             "name": {"given": "John", "family": "Doe"},
             "contact": [
                 {"system": "phone", "value": "555-1234"},
-                {"system": "email", "value": "john@example.com"}
-            ]
+                {"system": "email", "value": "john@example.com"},
+            ],
         }
     }
-    
+
     # Basic path access
     assert get(data, "patient.id") == "123"
     assert get(data, "patient.name.given") == "John"
     assert get(data, "patient.contact[0].value") == "555-1234"
-    
+
     # Array operations
     assert get(data, "patient.contact[*].system") == ["phone", "email"]
 
@@ -34,11 +29,11 @@ def test_get_function_basic():
 def test_put_function_basic():
     """Test basic put functionality."""
     data = {"patient": {"id": "123"}}
-    
+
     # Basic put
     result = put(data, "patient.name", "John Doe")
     assert result["patient"]["name"] == "John Doe"
-    
+
     # Nested put
     result = put(data, "patient.address.city", "Boston")
     assert result["patient"]["address"]["city"] == "Boston"

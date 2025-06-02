@@ -2,37 +2,37 @@
 A SpecialEnumlikeExtraDefinition (abbrv. SEED) is a series of helpful classes/enums that can be used with a `Piper` to modify data.
 """
 
-
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from enum import Enum
-from typing import Any, TypeAlias
+from typing import Any
+
 
 class SEED(ABC):
     """Base class for all SEED objects.
-    
+
     SEEDs are special objects that modify data processing behavior in Piper.
     They can be consumed during mapping execution to perform transformations,
     conditionals, or structural modifications.
     """
-    
+
     @abstractmethod
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         """Process the seed with given data and optional context.
-        
+
         Args:
             data: The input data to process
             context: Optional context containing parent references, indices, etc.
-        
+
         Returns:
             The processed result
         """
         pass
 
+
 # TODO: Along with note in `DROP` -- could this be removed and consolidated?
 class DropLevel(Enum):
     """
-    A DROP placeholder object indicates the object relative to the current value should be dropped. 
+    A DROP placeholder object indicates the object relative to the current value should be dropped.
       An "object" in this context is a dict or a list.
 
     Examples:
@@ -71,7 +71,7 @@ class DROP(SEED):
     A DROP placeholder object indicates the object relative to the current value should be dropped.
     An "object" in this context is a dict or a list.
     """
-    
+
     # TODO: Is there a way to have this be `DROP.THIS_OBJECT` as the object in the code
     #       E.g. originally it was `class DROP(Enum)` so this wasn't an issue, maybe this should be
     #       update to be `class DROP(Enum, SEED)`? Be an enum that implements `process`
@@ -80,13 +80,14 @@ class DROP(SEED):
     PARENT = DropLevel.PARENT
     GRANDPARENT = DropLevel.GRANDPARENT
     GREATGRANDPARENT = DropLevel.GREATGRANDPARENT
-    
+
     def __init__(self, level: DropLevel):
         self.level = level
-    
+
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         """DROP seeds are processed by Piper, not directly."""
         return self
+
 
 class KEEP(SEED):
     """
@@ -97,8 +98,7 @@ class KEEP(SEED):
 
     def __init__(self, value: Any):
         self.value = value
-    
+
     def process(self, data: Any, context: dict[str, Any] | None = None) -> Any:
         """KEEP seeds preserve their value during processing."""
         return self.value
-

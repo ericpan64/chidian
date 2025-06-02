@@ -1,31 +1,33 @@
-from typing import Any, Union
 import re
 from copy import deepcopy
+from typing import Any
 
 
-def put(target: dict[str, Any], path: str, value: Any, strict: bool = False) -> dict[str, Any]:
+def put(
+    target: dict[str, Any], path: str, value: Any, strict: bool = False
+) -> dict[str, Any]:
     """
     Set a value at a specific path in a nested dictionary structure.
-    
+
     This is the complement to the `get` function, allowing you to set values
     using dot notation paths.
-    
+
     Args:
         target: The dictionary to modify (will not be mutated)
         path: The path where to set the value (e.g., "patient.name.given")
         value: The value to set at the path
         strict: If True, raise errors when path cannot be created
-        
+
     Returns:
         A new dictionary with the value set at the specified path
-        
+
     Examples:
         >>> put({}, "patient.id", "123")
         {'patient': {'id': '123'}}
-        
+
         >>> put({}, "items[0].value", 42)
         {'items': [{'value': 42}]}
-        
+
         >>> put({"patient": {"name": "John"}}, "patient.id", "123")
         {'patient': {'name': 'John', 'id': '123'}}
     """
@@ -34,22 +36,30 @@ def put(target: dict[str, Any], path: str, value: Any, strict: bool = False) -> 
 
     # Parse the path into segments
     segments = _parse_put_path(path)
-    
+
     # Check if path starts with index - we don't support arrays at root
     if segments and segments[0]["type"] == "index":
         if strict:
-            raise ValueError("Cannot create array at root level - path must start with a key")
+            raise ValueError(
+                "Cannot create array at root level - path must start with a key"
+            )
         else:
             return result  # Return unchanged
-    
+
     # Navigate to the target location, creating structure as needed
     current = result
-    
+
     # TODO: This section is way too big, think through way to consolidate this and break it down
     for i, segment in enumerate(segments[:-1]):
         if segment["type"] == "key":
             key = segment["value"]
-            
+            # Type guard: key should be str for dict access
+            if not isinstance(key, str):
+                if strict:
+                    raise ValueError(f"Dictionary key must be string, got {type(key)}")
+                else:
+                    return target
+
             # Ensure current is a dict
             if not isinstance(current, dict):
                 if strict:
@@ -57,7 +67,7 @@ def put(target: dict[str, Any], path: str, value: Any, strict: bool = False) -> 
                 else:
                     # Skip this path
                     return target
-            
+
             # Create the key if it doesn't exist
             if key not in current:
                 # Look ahead to see what type we need
@@ -80,30 +90,40 @@ def put(target: dict[str, Any], path: str, value: Any, strict: bool = False) -> 
             elif isinstance(current[key], dict) and segments[i + 1]["type"] == "index":
                 # Have dict but need list - convert in non-strict mode
                 if strict:
-                    raise ValueError(f"Cannot index into dict at '{key}' - expected list")
+                    raise ValueError(
+                        f"Cannot index into dict at '{key}' - expected list"
+                    )
                 else:
                     current[key] = []
             elif isinstance(current[key], list) and segments[i + 1]["type"] == "key":
                 # Have list but need dict - convert in non-strict mode
                 if strict:
-                    raise ValueError(f"Cannot access key in list at '{key}' - expected dict")
+                    raise ValueError(
+                        f"Cannot access key in list at '{key}' - expected dict"
+                    )
                 else:
                     current[key] = {}
-            
+
             current = current[key]
-            
+
         elif segment["type"] == "index":
             idx = segment["value"]
-            
+            # Type guard: idx should be int for list access
+            if not isinstance(idx, int):
+                if strict:
+                    raise ValueError(f"List index must be integer, got {type(idx)}")
+                else:
+                    return target
+
             # Ensure current is a list
             if not isinstance(current, list):
                 if strict:
-                    raise ValueError(f"Cannot index into non-list")
+                    raise ValueError("Cannot index into non-list")
                 else:
                     # This shouldn't happen if the logic above is correct
                     # but handle it gracefully
                     return target
-            
+
             # Expand list if necessary
             if idx >= 0:
                 while len(current) <= idx:
@@ -117,7 +137,7 @@ def put(target: dict[str, Any], path: str, value: Any, strict: bool = False) -> 
                     else:
                         return target
                 idx = actual_idx
-            
+
             # Create dict/list at this index if needed
             if current[idx] is None:
                 # Look ahead to see what type we need
@@ -142,34 +162,50 @@ def put(target: dict[str, Any], path: str, value: Any, strict: bool = False) -> 
                     if strict:
                         next_seg = segments[i + 1]
                         if next_seg["type"] == "key":
-                            raise ValueError(f"Cannot traverse into non-dict at index {idx}")
+                            raise ValueError(
+                                f"Cannot traverse into non-dict at index {idx}"
+                            )
                         else:
-                            raise ValueError(f"Cannot traverse into non-list at index {idx}")
+                            raise ValueError(
+                                f"Cannot traverse into non-list at index {idx}"
+                            )
                     else:
                         return target
-            
+
             current = current[idx]
-    
+
     # Set the value at the final segment
     final_segment = segments[-1]
-    
+
     if final_segment["type"] == "key":
         key = final_segment["value"]
+        # Type guard: key should be str for dict access
+        if not isinstance(key, str):
+            if strict:
+                raise ValueError(f"Dictionary key must be string, got {type(key)}")
+            else:
+                return target
         if not isinstance(current, dict):
             if strict:
                 raise ValueError(f"Cannot set key '{key}' on non-dict")
             else:
                 return target
         current[key] = value
-        
+
     elif final_segment["type"] == "index":
         idx = final_segment["value"]
+        # Type guard: idx should be int for list access
+        if not isinstance(idx, int):
+            if strict:
+                raise ValueError(f"List index must be integer, got {type(idx)}")
+            else:
+                return target
         if not isinstance(current, list):
             if strict:
                 raise ValueError(f"Cannot set index {idx} on non-list")
             else:
                 return target
-        
+
         # Expand list if necessary
         if idx >= 0:
             while len(current) <= idx:
@@ -183,58 +219,58 @@ def put(target: dict[str, Any], path: str, value: Any, strict: bool = False) -> 
                 else:
                     return target
             idx = actual_idx
-        
+
         current[idx] = value
-    
+
     return result
 
 
-def _parse_put_path(path: str) -> list[dict[str, Union[str, int]]]:
+def _parse_put_path(path: str) -> list[dict[str, str | int]]:
     """
     Parse a path string into segments for the put operation.
-    
+
     Returns a list of dicts with 'type' and 'value' keys.
     Type can be 'key' or 'index'.
     """
     segments = []
     remaining = path
-    
+
     while remaining:
         # Try to match a key at the start
-        key_match = re.match(r'^([a-zA-Z_][\w-]*)', remaining)
+        key_match = re.match(r"^([a-zA-Z_][\w-]*)", remaining)
         if key_match:
             key = key_match.group(1)
             segments.append({"type": "key", "value": key})
-            remaining = remaining[len(key):]
-            
+            remaining = remaining[len(key) :]
+
             # Check for any following brackets
-            while remaining and remaining[0] == '[':
-                bracket_match = re.match(r'^\[(-?\d+)\]', remaining)
+            while remaining and remaining[0] == "[":
+                bracket_match = re.match(r"^\[(-?\d+)\]", remaining)
                 if bracket_match:
                     idx = int(bracket_match.group(1))
                     segments.append({"type": "index", "value": idx})
-                    remaining = remaining[bracket_match.end():]
+                    remaining = remaining[bracket_match.end() :]
                 else:
                     break
-        
+
         # Try to match a bracket at the start (for paths starting with [)
-        elif remaining and remaining[0] == '[':
-            bracket_match = re.match(r'^\[(-?\d+)\]', remaining)
+        elif remaining and remaining[0] == "[":
+            bracket_match = re.match(r"^\[(-?\d+)\]", remaining)
             if bracket_match:
                 idx = int(bracket_match.group(1))
                 segments.append({"type": "index", "value": idx})
-                remaining = remaining[bracket_match.end():]
+                remaining = remaining[bracket_match.end() :]
             else:
                 raise ValueError(f"Invalid bracket syntax in path: '{path}'")
-        
+
         # Skip dots
-        if remaining and remaining[0] == '.':
+        if remaining and remaining[0] == ".":
             remaining = remaining[1:]
         elif remaining:
             # We have remaining content but can't parse it
             raise ValueError(f"Invalid path syntax at: '{remaining}' in path: '{path}'")
-    
+
     if not segments:
         raise ValueError(f"Invalid path: '{path}'")
-    
+
     return segments

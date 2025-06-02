@@ -6,11 +6,8 @@
 
 chidian is a cross-language framework for composable, readable, and sharable data mappings built on top of Pydantic.
 
-## Install
-```
-pip install chidian   # Python ≥ 3.8
-```
-The wheel bundles the Rust core; no system toolchain required.
+> [!NOTE]
+> chidian is pre-release -- v0.1 will be on PyPI soon! Feel free to build the code locally (using [maturin](https://github.com/PyO3/maturin)) if you want to try it out now.
 
 ## 30-second tour
 ```python
