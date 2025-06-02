@@ -99,7 +99,7 @@ The goals of the library are:
 Several challenges come up with traditional data mapping code:
 1. **It's verbose**: Data can be very messy and has a lot of edge cases
 2. **It's hard to share**: Code is often written for one-off use-cases
-3. **It's difficult to collaborate**: Data interoperability becomes more difficult when subtle cases 
+3. **It's difficult to collaborate**: Data interoperability becomes more difficult when subtle cases
 
 chidian aims to solve these issues by taking stronger opinions on common operations:
 1. **Prefer iteration over exactness**: With data, we learn as we iterate and use what we need!
