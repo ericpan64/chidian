@@ -97,8 +97,7 @@ def add(value: Any, before: bool = False) -> Callable[[Any], Any]:
     if before:
         return partial(operator.add, value)
     else:
-        # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-        return lambda x: operator.add(x, value)
+        return partial(lambda x, v: operator.add(x, v), v=value)
 
 
 def subtract(value: Any, before: bool = False) -> Callable[[Any], Any]:
@@ -106,8 +105,7 @@ def subtract(value: Any, before: bool = False) -> Callable[[Any], Any]:
     if before:
         return partial(operator.sub, value)
     else:
-        # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-        return lambda x: operator.sub(x, value)
+        return partial(lambda x, v: operator.sub(x, v), v=value)
 
 
 def multiply(value: Any, before: bool = False) -> Callable[[Any], Any]:
@@ -115,8 +113,7 @@ def multiply(value: Any, before: bool = False) -> Callable[[Any], Any]:
     if before:
         return partial(operator.mul, value)
     else:
-        # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-        return lambda x: operator.mul(x, value)
+        return partial(lambda x, v: operator.mul(x, v), v=value)
 
 
 def divide(value: Any, before: bool = False) -> Callable[[Any], Any]:
@@ -124,8 +121,7 @@ def divide(value: Any, before: bool = False) -> Callable[[Any], Any]:
     if before:
         return partial(operator.truediv, value)
     else:
-        # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-        return lambda x: operator.truediv(x, value)
+        return partial(lambda x, v: operator.truediv(x, v), v=value)
 
 
 # Comparison operations using operator module
@@ -151,58 +147,49 @@ def not_equivalent(value: Any) -> Callable[[Any], bool]:
 
 def contains(value: Any) -> Callable[[Any], bool]:
     """Check if input contains the given value."""
-    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return lambda x: operator.contains(x, value)
+    return partial(lambda x, v: operator.contains(x, v), v=value)
 
 
 def not_contains(value: Any) -> Callable[[Any], bool]:
     """Check if input does not contain the given value."""
-    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return lambda x: not operator.contains(x, value)
+    return partial(lambda x, v: not operator.contains(x, v), v=value)
 
 
 def contained_in(container: Any) -> Callable[[Any], bool]:
     """Check if input is contained in the given container."""
-    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return lambda x: operator.contains(container, x)
+    return partial(lambda c, x: operator.contains(c, x), container)
 
 
 def not_contained_in(container: Any) -> Callable[[Any], bool]:
     """Check if input is not contained in the given container."""
-    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return lambda x: not operator.contains(container, x)
+    return partial(lambda c, x: not operator.contains(c, x), container)
 
 
 def isinstance_of(type_or_types: type) -> Callable[[Any], bool]:
     """Check if input is an instance of the given type(s)."""
-    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return lambda x: isinstance(x, type_or_types)
+    return partial(lambda x, types: isinstance(x, types), types=type_or_types)
 
 
 # Iterable operations using operator module
 def keep(n: int) -> Callable[[Sequence[T]], Sequence[T]]:
     """Keep only the first n items from an iterable."""
-    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return lambda x: x[:n]
+    return partial(lambda x, n: x[:n], n=n)
 
 
-def index(i: int) -> Callable[[Sequence[T]], T]:
+def index(i: int) -> Callable[[Sequence[T]], Any]:
     """Get the item at index i from an iterable."""
-    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return lambda x: operator.getitem(x, i)
+    return partial(lambda x, idx: operator.getitem(x, idx), idx=i)
 
 
 # Standard library wrappers
 def map_to_list(func: Callable[[T], Any]) -> Callable[[Iterable[T]], list]:
     """Apply a function to each item in an iterable and return a list."""
-    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return lambda iterable: list(map(func, iterable))
+    return partial(lambda f, iterable: list(map(f, iterable)), func)
 
 
 def filter_to_list(predicate: Callable[[T], bool]) -> Callable[[Iterable[T]], list]:
     """Filter an iterable using a predicate and return a list."""
-    # TODO: This shouldn't return a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return lambda iterable: list(filter(predicate, iterable))
+    return partial(lambda p, iterable: list(filter(p, iterable)), predicate)
 
 
 # String manipulation functions as ChainableFn
@@ -219,14 +206,18 @@ def split(sep: str | None = None) -> ChainableFn:
 
 def replace(old: str, new: str) -> ChainableFn:
     """Create a chainable replace function."""
-    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return ChainableFn(lambda s: s.replace(old, new))
+    return ChainableFn(
+        partial(
+            lambda s, old_val, new_val: s.replace(old_val, new_val),
+            old_val=old,
+            new_val=new,
+        )
+    )
 
 
 def join(sep: str) -> ChainableFn:
     """Create a chainable join function."""
-    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return ChainableFn(lambda items: sep.join(items))
+    return ChainableFn(partial(lambda separator, items: separator.join(items), sep))
 
 
 # Array/List operations as ChainableFn
@@ -237,14 +228,12 @@ length = ChainableFn(len)
 
 def at_index(i: int) -> ChainableFn:
     """Get element at index."""
-    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return ChainableFn(lambda x: x[i] if len(x) > i else None)
+    return ChainableFn(partial(lambda x, idx: x[idx] if len(x) > idx else None, idx=i))
 
 
 def slice_range(start: int | None = None, end: int | None = None) -> ChainableFn:
     """Slice a sequence."""
-    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return ChainableFn(lambda x: x[start:end])
+    return ChainableFn(partial(lambda x, s, e: x[s:e], s=start, e=end))
 
 
 # Type conversions as ChainableFn
@@ -262,20 +251,19 @@ def round_to(decimals: int) -> ChainableFn:
 
 def default_to(default_value: Any) -> ChainableFn:
     """Replace None with default value."""
-    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return ChainableFn(lambda x: default_value if x is None else x)
+    return ChainableFn(
+        partial(lambda x, default: default if x is None else x, default=default_value)
+    )
 
 
 def extract_id() -> ChainableFn:
     """Extract ID from FHIR reference (e.g., 'Patient/123' -> '123')."""
-    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
     return ChainableFn(lambda ref: ref.split("/")[-1] if "/" in str(ref) else ref)
 
 
 def format_string(template: str) -> ChainableFn:
     """Format value into a string template."""
-    # TODO: This shouldn't use a lambda -- it needs to return a fixed point in memory (lambda gets recreated each time)
-    return ChainableFn(lambda x: template.format(x))
+    return ChainableFn(partial(lambda x, tmpl: tmpl.format(x), tmpl=template))
 
 
 # New partials replacing former SEED classes
