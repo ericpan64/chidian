@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "chidian-core", 
+    "chidian-core",
     "chidian-py"
 ]
 resolver = "2"

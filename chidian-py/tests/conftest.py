@@ -1,18 +1,20 @@
-from typing import Any
-from pydantic import BaseModel
-
 import json
+from typing import Any
+
 import pytest
 
-@pytest.fixture(scope="function") 
+
+@pytest.fixture(scope="function")
 def test_A() -> dict[str, Any]:
     with open("tests/A.json", "r") as f:
         return json.load(f)
+
 
 @pytest.fixture(scope="function")
 def test_B() -> dict[str, Any]:
     with open("tests/B.json", "r") as f:
         return json.load(f)
+
 
 def _simple_nested_list() -> list[dict[str, Any]]:
     return [
@@ -67,7 +69,9 @@ def _deep_nested_list() -> list[dict[str, Any]]:
                 # 'ints' is deliberately missing
                 "some_dict": {"char": "d", "inner": {"msg": "D!"}},
                 # `list_of_dicts` is deliberately len=1 instead of len=2
-                "list_of_dicts": [{"num": 7, "text": "seven", "inner": {"msg": "Seven!"}}],
+                "list_of_dicts": [
+                    {"num": 7, "text": "seven", "inner": {"msg": "Seven!"}}
+                ],
             }
         },
     ]
@@ -78,7 +82,7 @@ def simple_nested_list() -> list[dict[str, Any]]:
     return _simple_nested_list()
 
 
-@pytest.fixture(scope="function") 
+@pytest.fixture(scope="function")
 def deep_nested_list() -> list[dict[str, Any]]:
     return _deep_nested_list()
 
@@ -112,26 +116,42 @@ def fhir_bundle() -> dict[str, Any]:
                     "id": "bp-1",
                     "status": "final",
                     "subject": {"reference": "Patient/123"},
-                    "code": {"coding": [{"code": "85354-9", "display": "Blood pressure"}]},
+                    "code": {
+                        "coding": [{"code": "85354-9", "display": "Blood pressure"}]
+                    },
                     "component": [
-                        {"code": {"coding": [{"code": "8480-6"}]}, "valueQuantity": {"value": 120}},
-                        {"code": {"coding": [{"code": "8462-4"}]}, "valueQuantity": {"value": 80}}
-                    ]
+                        {
+                            "code": {"coding": [{"code": "8480-6"}]},
+                            "valueQuantity": {"value": 120},
+                        },
+                        {
+                            "code": {"coding": [{"code": "8462-4"}]},
+                            "valueQuantity": {"value": 80},
+                        },
+                    ],
                 }
             },
             {
                 "resource": {
-                    "resourceType": "Observation", 
+                    "resourceType": "Observation",
                     "id": "bp-2",
                     "status": "final",
                     "subject": {"reference": "Patient/456"},
-                    "code": {"coding": [{"code": "85354-9", "display": "Blood pressure"}]},
+                    "code": {
+                        "coding": [{"code": "85354-9", "display": "Blood pressure"}]
+                    },
                     "component": [
-                        {"code": {"coding": [{"code": "8480-6"}]}, "valueQuantity": {"value": 140}},
-                        {"code": {"coding": [{"code": "8462-4"}]}, "valueQuantity": {"value": 90}}
-                    ]
+                        {
+                            "code": {"coding": [{"code": "8480-6"}]},
+                            "valueQuantity": {"value": 140},
+                        },
+                        {
+                            "code": {"coding": [{"code": "8462-4"}]},
+                            "valueQuantity": {"value": 90},
+                        },
+                    ],
                 }
-            }
+            },
         ]
     }
 
@@ -145,7 +165,7 @@ def fhir_observation() -> dict[str, Any]:
         "status": "final",
         "subject": {"reference": "Patient/456"},
         "code": {"coding": [{"system": "LOINC", "code": "8480-6"}]},
-        "valueQuantity": {"value": 140.0, "unit": "mmHg"}
+        "valueQuantity": {"value": 140.0, "unit": "mmHg"},
     }
 
 
@@ -159,29 +179,35 @@ def complex_patient_bundle() -> dict[str, Any]:
                 "name": [{"given": ["John"], "family": "Doe"}],
                 "providers": [
                     {
-                        "id": "prov-1", 
+                        "id": "prov-1",
                         "name": "Dr. Smith",
                         "observations": [
                             {
                                 "id": "obs-1",
-                                "code": {"coding": [{"code": "8480-6", "display": "Systolic BP"}]},
-                                "value": 140
+                                "code": {
+                                    "coding": [
+                                        {"code": "8480-6", "display": "Systolic BP"}
+                                    ]
+                                },
+                                "value": 140,
                             }
-                        ]
+                        ],
                     },
                     {
                         "id": "prov-2",
                         "name": "Dr. Jones",
                         "observations": [
                             {
-                                "id": "obs-2", 
-                                "code": {"coding": [{"code": "33747-0", "display": "Status"}]},
+                                "id": "obs-2",
+                                "code": {
+                                    "coding": [{"code": "33747-0", "display": "Status"}]
+                                },
                                 "value": "Normal",
-                                "status": "final"
+                                "status": "final",
                             }
-                        ]
-                    }
-                ]
+                        ],
+                    },
+                ],
             }
         ]
     }

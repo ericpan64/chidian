@@ -30,9 +30,8 @@ CLAUDE.md
 .claude/
 .aider*
 codebase.md
+diff.txt
 .aidigestignore
 
 # SpecStory explanation file
 .specstory/.what-is-this.md
-
-
