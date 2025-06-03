@@ -329,3 +329,136 @@ def test_partials_integration_with_chains():
 
     name_data = {"first": "john", "last": "doe"}
     assert name_chain(name_data) == "JOHN DOE"
+
+
+def test_lookup_with_dict():
+    """Test lookup function with dictionaries."""
+    codes = {"A": "Alpha", "B": "Beta", "C": "Charlie"}
+
+    # Basic lookup
+    lookup_codes = p.lookup(codes)
+    assert lookup_codes("A") == "Alpha"
+    assert lookup_codes("B") == "Beta"
+    assert lookup_codes("Z") is None  # Missing key returns None
+
+    # Lookup with custom default
+    lookup_with_default = p.lookup(codes, default="Unknown")
+    assert lookup_with_default("A") == "Alpha"
+    assert lookup_with_default("Z") == "Unknown"
+
+    # Chain with get
+    chain = p.get("code") >> p.lookup(codes, "N/A")
+    assert chain({"code": "B"}) == "Beta"
+    assert chain({"code": "X"}) == "N/A"
+    assert chain({"other": "Y"}) == "N/A"
+
+
+def test_lookup_with_lexicon():
+    """Test lookup function with Lexicon."""
+    from chidian.lexicon import Lexicon
+
+    # Create a lexicon with default
+    lexicon = Lexicon({"01": "One", "02": "Two"}, default="Unknown")
+
+    # Basic lookup
+    lookup_lex = p.lookup(lexicon)
+    assert lookup_lex("01") == "One"
+    assert lookup_lex("02") == "Two"
+    assert lookup_lex("99") == "Unknown"  # Uses Lexicon's default
+
+    # Lookup with override default
+    lookup_override = p.lookup(lexicon, default="Not Found")
+    assert lookup_override("01") == "One"
+    assert lookup_override("99") == "Not Found"  # Override default
+
+    # Test bidirectional lookup (Lexicon feature)
+    assert lookup_lex("One") == "01"  # Reverse lookup
+    assert lookup_lex("Two") == "02"
+
+
+def test_lookup_with_list():
+    """Test lookup function with lists (using index)."""
+    values = ["zero", "one", "two", "three"]
+
+    lookup_list = p.lookup(values, default="out of range")
+    assert lookup_list(0) == "zero"
+    assert lookup_list(2) == "two"
+    assert lookup_list(10) == "out of range"
+    assert lookup_list(-1) == "three"  # Negative index
+
+    # Chain with other operations
+    chain = p.to_int >> p.lookup(values, "invalid")
+    assert chain("1") == "one"
+    assert chain("99") == "invalid"
+
+
+def test_lookup_with_custom_getitem():
+    """Test lookup with custom object implementing __getitem__."""
+
+    class CustomMapping:
+        def __getitem__(self, key):
+            if key == "special":
+                return "✨ Special Value ✨"
+            raise KeyError(f"Key {key} not found")
+
+    custom = CustomMapping()
+    lookup_custom = p.lookup(custom, default="default")
+
+    assert lookup_custom("special") == "✨ Special Value ✨"
+    assert lookup_custom("other") == "default"
+
+
+def test_lookup_complex_chains():
+    """Test lookup in complex transformation chains."""
+    # Medical code transformation
+    loinc_to_display = {
+        "8480-6": "Systolic blood pressure",
+        "8462-4": "Diastolic blood pressure",
+        "8867-4": "Heart rate",
+    }
+
+    # Extract and transform
+    transform = (
+        p.get("measurements[0].code")
+        >> p.lookup(loinc_to_display, "Unknown measurement")
+        >> p.upper
+        >> p.replace(" ", "_")
+    )
+
+    data = {"measurements": [{"code": "8480-6", "value": 120}]}
+    assert transform(data) == "SYSTOLIC_BLOOD_PRESSURE"
+
+    # Multiple lookups in sequence
+    status_codes = {"A": "active", "I": "inactive", "P": "pending"}
+    status_display = {
+        "active": "✓ Active",
+        "inactive": "✗ Inactive",
+        "pending": "⏳ Pending",
+    }
+
+    status_chain = (
+        p.get("status_code")
+        >> p.lookup(status_codes, "unknown")
+        >> p.lookup(status_display, "? Unknown")
+    )
+
+    assert status_chain({"status_code": "A"}) == "✓ Active"
+    assert status_chain({"status_code": "X"}) == "? Unknown"
+
+
+def test_lookup_caching():
+    """Test that lookup function is created only once."""
+    mapping = {"a": 1, "b": 2}
+
+    # Create two lookup functions with same mapping
+    lookup1 = p.lookup(mapping)
+    lookup2 = p.lookup(mapping)
+
+    # They should be different ChainableFn instances
+    assert lookup1 is not lookup2
+
+    # But the underlying function should work the same
+    assert lookup1("a") == lookup2("a") == 1
+
+    # The function is created once per call to lookup()
+    # not per invocation of the returned ChainableFn

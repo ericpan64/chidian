@@ -249,6 +249,43 @@ def round_to(decimals: int) -> ChainableFn:
     return ChainableFn(partial(round, ndigits=decimals))
 
 
+def lookup(mapping: Any, default: Any = None) -> ChainableFn:
+    """
+    Create a chainable lookup function for objects supporting __getitem__.
+
+    Works with dict, Lexicon, or any object that implements __getitem__.
+    Uses the get() method if available for safe lookups with default values.
+
+    Args:
+        mapping: Object supporting __getitem__ (dict, Lexicon, etc.)
+        default: Default value to return if key is not found
+
+    Returns:
+        ChainableFn that performs lookups on the mapping
+
+    Examples:
+        >>> codes = {'A': 'Alpha', 'B': 'Beta'}
+        >>> get('code') >> lookup(codes, 'Unknown')
+
+        >>> lexicon = Lexicon({'01': 'One', '02': 'Two'})
+        >>> get('id') >> lookup(lexicon)
+    """
+    # Create the lookup function once, not per invocation
+    if hasattr(mapping, "get"):
+        # Use get method if available (dict, Lexicon, etc.)
+        def lookup_fn(key):
+            return mapping.get(key, default)
+    else:
+        # Fallback to __getitem__ with try/except
+        def lookup_fn(key):
+            try:
+                return mapping[key]
+            except (KeyError, IndexError, TypeError):
+                return default
+
+    return ChainableFn(lookup_fn)
+
+
 def default_to(default_value: Any) -> ChainableFn:
     """Replace None with default value."""
     return ChainableFn(
