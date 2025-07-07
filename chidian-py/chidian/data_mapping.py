@@ -2,14 +2,18 @@
 DataMapping class as forward-only validator wrapper around Piper.
 """
 
-from typing import Any, Type
+from typing import Any, Generic, Type, TypeVar
 
 from pydantic import BaseModel
 
 from .piper import Piper
 
+# Define generic type variables bounded to BaseModel
+_InModel = TypeVar("_InModel", bound=BaseModel)
+_OutModel = TypeVar("_OutModel", bound=BaseModel)
 
-class DataMapping:
+
+class DataMapping(Generic[_InModel, _OutModel]):
     """
     A forward-only data mapping with schema validation.
 
@@ -20,8 +24,8 @@ class DataMapping:
     def __init__(
         self,
         piper: Piper,
-        input_schema: Type[BaseModel],
-        output_schema: Type[BaseModel],
+        input_schema: Type[_InModel],
+        output_schema: Type[_OutModel],
         strict: bool = True,
     ):
         """
@@ -40,7 +44,7 @@ class DataMapping:
         self.output_schema = output_schema
         self.strict = strict
 
-    def forward(self, data: Any) -> BaseModel:
+    def forward(self, data: Any) -> _OutModel:
         """
         Transform and validate data from input to output schema.
 
@@ -87,22 +91,22 @@ class DataMapping:
         except TypeError:
             return False
 
-    def _validate_input(self, data: Any) -> BaseModel:
+    def _validate_input(self, data: Any) -> _InModel:
         """Validate input data against input schema."""
         if isinstance(data, self.input_schema):
-            return data
+            return data  # type: ignore[return-value]
 
         # Try to convert dict to model
         if isinstance(data, dict):
-            return self.input_schema.model_validate(data)
+            return self.input_schema.model_validate(data)  # type: ignore[return-value]
 
         # Try direct validation
-        return self.input_schema.model_validate(data)
+        return self.input_schema.model_validate(data)  # type: ignore[return-value]
 
-    def _to_dict(self, model: BaseModel) -> dict[str, Any]:
+    def _to_dict(self, model: _InModel) -> dict[str, Any]:
         """Convert Pydantic model to dictionary."""
         return model.model_dump()
 
-    def _validate_output(self, data: dict[str, Any]) -> BaseModel:
+    def _validate_output(self, data: dict[str, Any]) -> _OutModel:
         """Validate output data against output schema."""
-        return self.output_schema.model_validate(data)
+        return self.output_schema.model_validate(data)  # type: ignore[return-value]
