@@ -1,6 +1,7 @@
 use chidian_core::parser::{Path, PathSegment};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::IntoPyObjectExt;
 
 // Apply a chain of functions to a value
 pub fn apply_functions(
@@ -15,14 +16,14 @@ pub fn apply_functions(
         let func_list = functions.downcast::<PyList>()?;
         for func in func_list.iter() {
             match func.call1((current,)) {
-                Ok(result) => current = result.to_object(py),
+                Ok(result) => current = result.into_py_any(py).unwrap(),
                 Err(_) => return Ok(py.None()),
             }
         }
     } else {
         // Single function
         match functions.call1((current,)) {
-            Ok(result) => current = result.to_object(py),
+            Ok(result) => current = result.into_py_any(py).unwrap(),
             Err(_) => return Ok(py.None()),
         }
     }
@@ -37,7 +38,7 @@ pub fn traverse_path_strict(
     path: &Path,
     flatten: bool,
 ) -> PyResult<PyObject> {
-    let mut current = vec![data.to_object(py)];
+    let mut current = vec![data.into_py_any(py).unwrap()];
 
     for segment in &path.segments {
         let mut next = Vec::new();
@@ -49,7 +50,7 @@ pub fn traverse_path_strict(
                 PathSegment::Key(key) => {
                     if let Ok(dict) = item_ref.downcast::<PyDict>() {
                         if let Some(value) = dict.get_item(key)? {
-                            next.push(value.to_object(py));
+                            next.push(value.into_py_any(py).unwrap());
                         } else {
                             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                                 "Key '{}' not found",
@@ -61,7 +62,7 @@ pub fn traverse_path_strict(
                         for list_item in list {
                             if let Ok(dict) = list_item.downcast::<PyDict>() {
                                 if let Some(value) = dict.get_item(key)? {
-                                    next.push(value.to_object(py));
+                                    next.push(value.into_py_any(py).unwrap());
                                 } else {
                                     return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                                         format!("Key '{}' not found in list element", key),
@@ -85,7 +86,7 @@ pub fn traverse_path_strict(
                         let actual_idx = if *idx < 0 { len + idx } else { *idx };
 
                         if actual_idx >= 0 && actual_idx < len {
-                            next.push(list.get_item(actual_idx as usize)?.to_object(py));
+                            next.push(list.get_item(actual_idx as usize)?.into_py_any(py).unwrap());
                         } else {
                             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                                 "Index {} out of range",
@@ -118,13 +119,13 @@ pub fn traverse_path_strict(
                         let slice_items: Vec<PyObject> = if start_idx <= end_idx {
                             (start_idx..end_idx)
                                 .filter_map(|i| list.get_item(i).ok())
-                                .map(|item| item.to_object(py))
+                                .map(|item| item.into_py_any(py).unwrap())
                                 .collect()
                         } else {
                             Vec::new()
                         };
 
-                        next.push(PyList::new(py, slice_items)?.to_object(py));
+                        next.push(PyList::new(py, slice_items)?.into_py_any(py).unwrap());
                     } else {
                         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                             "Expected list but got different type",
@@ -134,7 +135,7 @@ pub fn traverse_path_strict(
                 PathSegment::Wildcard => {
                     if let Ok(list) = item_ref.downcast::<PyList>() {
                         for list_item in list {
-                            next.push(list_item.to_object(py));
+                            next.push(list_item.into_py_any(py).unwrap());
                         }
                     } else {
                         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -150,7 +151,7 @@ pub fn traverse_path_strict(
                         tuple_items.push(result);
                     }
 
-                    next.push(PyTuple::new(py, tuple_items)?.to_object(py));
+                    next.push(PyTuple::new(py, tuple_items)?.into_py_any(py).unwrap());
                 }
             }
         }
@@ -167,24 +168,24 @@ pub fn traverse_path_strict(
                 for subitem in list {
                     if let Ok(sublist) = subitem.downcast::<PyList>() {
                         for subsubitem in sublist {
-                            flattened.push(subsubitem.to_object(py));
+                            flattened.push(subsubitem.into_py_any(py).unwrap());
                         }
                     } else {
-                        flattened.push(subitem.to_object(py));
+                        flattened.push(subitem.into_py_any(py).unwrap());
                     }
                 }
             } else {
                 flattened.push(item.clone_ref(py));
             }
         }
-        return Ok(PyList::new(py, flattened)?.to_object(py));
+        return Ok(PyList::new(py, flattened)?.into_py_any(py).unwrap());
     }
 
     // Return the result
     if current.len() == 1 {
         Ok(current[0].clone_ref(py))
     } else {
-        Ok(PyList::new(py, current)?.to_object(py))
+        Ok(PyList::new(py, current)?.into_py_any(py).unwrap())
     }
 }
 
@@ -195,7 +196,7 @@ pub fn traverse_path(
     path: &Path,
     flatten: bool,
 ) -> PyResult<PyObject> {
-    let mut current = vec![data.to_object(py)];
+    let mut current = vec![data.into_py_any(py).unwrap()];
 
     for segment in &path.segments {
         let mut next = Vec::new();
@@ -207,7 +208,7 @@ pub fn traverse_path(
                 PathSegment::Key(key) => {
                     if let Ok(dict) = item_ref.downcast::<PyDict>() {
                         if let Some(value) = dict.get_item(key)? {
-                            next.push(value.to_object(py));
+                            next.push(value.into_py_any(py).unwrap());
                         } else {
                             next.push(py.None());
                         }
@@ -216,7 +217,7 @@ pub fn traverse_path(
                         for list_item in list {
                             if let Ok(dict) = list_item.downcast::<PyDict>() {
                                 if let Some(value) = dict.get_item(key)? {
-                                    next.push(value.to_object(py));
+                                    next.push(value.into_py_any(py).unwrap());
                                 } else {
                                     next.push(py.None());
                                 }
@@ -234,7 +235,7 @@ pub fn traverse_path(
                         let actual_idx = if *idx < 0 { len + idx } else { *idx };
 
                         if actual_idx >= 0 && actual_idx < len {
-                            next.push(list.get_item(actual_idx as usize)?.to_object(py));
+                            next.push(list.get_item(actual_idx as usize)?.into_py_any(py).unwrap());
                         } else {
                             next.push(py.None());
                         }
@@ -262,13 +263,13 @@ pub fn traverse_path(
                         let slice_items: Vec<PyObject> = if start_idx <= end_idx {
                             (start_idx..end_idx)
                                 .filter_map(|i| list.get_item(i).ok())
-                                .map(|item| item.to_object(py))
+                                .map(|item| item.into_py_any(py).unwrap())
                                 .collect()
                         } else {
                             Vec::new()
                         };
 
-                        next.push(PyList::new(py, slice_items)?.to_object(py));
+                        next.push(PyList::new(py, slice_items)?.into_py_any(py).unwrap());
                     } else {
                         next.push(py.None());
                     }
@@ -276,7 +277,7 @@ pub fn traverse_path(
                 PathSegment::Wildcard => {
                     if let Ok(list) = item_ref.downcast::<PyList>() {
                         for list_item in list {
-                            next.push(list_item.to_object(py));
+                            next.push(list_item.into_py_any(py).unwrap());
                         }
                     } else {
                         next.push(py.None());
@@ -290,7 +291,7 @@ pub fn traverse_path(
                         tuple_items.push(result);
                     }
 
-                    next.push(PyTuple::new(py, tuple_items)?.to_object(py));
+                    next.push(PyTuple::new(py, tuple_items)?.into_py_any(py).unwrap());
                 }
             }
         }
@@ -307,23 +308,23 @@ pub fn traverse_path(
                 for subitem in list {
                     if let Ok(sublist) = subitem.downcast::<PyList>() {
                         for subsubitem in sublist {
-                            flattened.push(subsubitem.to_object(py));
+                            flattened.push(subsubitem.into_py_any(py).unwrap());
                         }
                     } else {
-                        flattened.push(subitem.to_object(py));
+                        flattened.push(subitem.into_py_any(py).unwrap());
                     }
                 }
             } else {
                 flattened.push(item.clone_ref(py));
             }
         }
-        return Ok(PyList::new(py, flattened)?.to_object(py));
+        return Ok(PyList::new(py, flattened)?.into_py_any(py).unwrap());
     }
 
     // Return the result
     if current.len() == 1 {
         Ok(current[0].clone_ref(py))
     } else {
-        Ok(PyList::new(py, current)?.to_object(py))
+        Ok(PyList::new(py, current)?.into_py_any(py).unwrap())
     }
 }

@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use pyo3::IntoPyObjectExt;
 
 mod py_traversal;
 
@@ -42,7 +43,7 @@ fn get(
     let mut final_result = result;
     if final_result.bind(py).is_none() {
         if let Some(default_val) = default {
-            final_result = default_val.to_object(py);
+            final_result = default_val.into_py_any(py).unwrap();
         }
     }
 
