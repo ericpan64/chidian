@@ -31,7 +31,12 @@ CLAUDE.md
 .aider*
 codebase.md
 diff.txt
+digest.txt
+temp.txt
 .aidigestignore
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 
 # SpecStory explanation file
 .specstory/.what-is-this.md
