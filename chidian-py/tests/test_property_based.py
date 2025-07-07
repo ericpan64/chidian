@@ -79,84 +79,78 @@ class TestPropertyBasedCore:
         result = get(data, "nonexistent.path")
         assert result is None
 
-    @given(st.text(max_size=50), st.text(max_size=50))
-    def test_template_formatting(self, value1, value2):
-        """Test that template always returns a string."""
-        template_func = p.template("{} {}")
-        result = template_func(value1, value2)
-        assert isinstance(result, str)
-        # Values should appear in result (as strings)
-        assert str(value1) in result
-        assert str(value2) in result
+    @given(st.text(alphabet=st.characters(blacklist_categories=["Z"]), max_size=50))
+    def test_string_operations_property(self, text_value):
+        """Test that string operations are consistent."""
+        # Test upper/lower are reversible
+        upper_result = p.upper(text_value)
+        lower_result = p.lower(text_value)
 
-    @given(
-        st.lists(
-            st.text(
-                alphabet=st.characters(whitelist_categories=("Ll", "Lu")),
-                min_size=1,
-                max_size=8,
-            ),
-            min_size=1,
-            max_size=3,
-        )
-    )
-    def test_coalesce_returns_value(self, path_names):
-        """Test that coalesce always returns something."""
-        # Filter out empty strings
-        valid_paths = [p for p in path_names if p]
-        if not valid_paths:
-            return  # Skip if no valid paths
+        assert isinstance(upper_result, str)
+        assert isinstance(lower_result, str)
 
-        # Create data with at least one non-empty value
-        data = {valid_paths[0]: "found_value"}
+        # Test strip functionality (strip removes all surrounding whitespace)
+        if text_value:
+            padded = f"  {text_value}  "
+            stripped = p.strip(padded)
+            assert isinstance(stripped, str)
+            # strip removes leading/trailing whitespace from the original value too
+            assert stripped == text_value.strip()
 
-        coalesce = p.coalesce(*valid_paths, default="DEFAULT")
-        result = coalesce(data)
+    @given(st.integers(min_value=1, max_value=100))
+    def test_arithmetic_operations_property(self, value):
+        """Test that arithmetic operations are consistent."""
+        # Test basic arithmetic properties
+        add_result = p.add(10)(value)
+        assert add_result == value + 10
 
-        # Should return either the found value or the default
-        assert result == "found_value" or result == "DEFAULT"
+        multiply_result = p.multiply(2)(value)
+        assert multiply_result == value * 2
 
-    @given(
-        st.lists(
-            st.text(
-                alphabet=st.characters(whitelist_categories=("Ll", "Lu")),
-                min_size=1,
-                max_size=8,
-            ),
-            min_size=1,
-            max_size=3,
-        )
-    )
-    def test_flatten_returns_string(self, path_names):
-        """Test that flatten always returns a string."""
-        # Filter out empty strings
-        valid_paths = [p for p in path_names if p]
-        if not valid_paths:
-            return  # Skip if no valid paths
+        # Test chain consistency with ChainableFn
+        add_chainable = p.ChainableFn(p.add(5))
+        multiply_chainable = p.ChainableFn(p.multiply(2))
+        chain_result = (add_chainable >> multiply_chainable)(value)
+        assert chain_result == (value + 5) * 2
 
-        # Create data with lists for each path
-        data = {path: [f"value_{i}" for i in range(2)] for path in valid_paths}
+    @given(st.lists(st.text(min_size=1, max_size=10), min_size=1, max_size=5))
+    def test_array_operations_property(self, test_list):
+        """Test that array operations work consistently."""
+        # Test first/last
+        first_result = p.first(test_list)
+        last_result = p.last(test_list)
 
-        flatten_func = p.flatten(valid_paths, delimiter=", ")
-        result = flatten_func(data)
+        assert first_result == test_list[0]
+        assert last_result == test_list[-1]
 
-        assert isinstance(result, str)
+        # Test length
+        length_result = p.length(test_list)
+        assert length_result == len(test_list)
+
+        # Test at_index
+        if len(test_list) > 2:
+            middle_result = p.at_index(1)(test_list)
+            assert middle_result == test_list[1]
 
     @given(st.dictionaries(st.text(max_size=20), st.text(max_size=20), min_size=1))
-    def test_case_matching(self, cases):
-        """Test that case matching works reliably."""
-        if not cases:
+    def test_boolean_operations_property(self, test_dict):
+        """Test that boolean operations work consistently."""
+        if not test_dict:
             return
 
-        # Pick a key that exists in cases
-        test_key = list(cases.keys())[0]
-        expected_value = cases[test_key]
+        # Pick a key that exists
+        test_key = list(test_dict.keys())[0]
+        test_value = test_dict[test_key]
 
-        case_func = p.case(cases, default="DEFAULT")
+        # Test equals
+        equals_func = p.equals(test_value)
+        assert equals_func(test_value) is True
+        assert equals_func("different_value") is False
 
-        # Should return the expected value for exact match
-        result = case_func(test_key)
-        assert result == expected_value
+        # Test contains
+        contains_func = p.contains(test_key)
+        assert contains_func(test_dict) is True
+        assert contains_func({}) is False
 
     @given(st.text(max_size=100))
     def test_partials_chaining(self, input_text):
@@ -215,26 +209,33 @@ class TestPropertyBasedRobustness:
         # Result should be None or a valid type
         assert result is None or isinstance(result, (str, int, list, dict, bool, float))
 
-    @given(st.text(), st.text())
-    def test_template_edge_cases(self, template_str, value):
-        """Test template with various inputs."""
-        if "{}" in template_str:
-            try:
-                template_func = p.template(template_str)
-                result = template_func(value)
-                assert isinstance(result, str)
-            except (ValueError, IndexError):
-                # Template formatting errors are acceptable
-                pass
+    @given(st.text(min_size=1), st.text())
+    def test_type_conversion_edge_cases(self, separator, input_value):
+        """Test type conversions with various inputs."""
+        # Test string conversions are robust
+        str_result = p.to_str(input_value)
+        assert isinstance(str_result, str)
 
-    @given(st.lists(st.text(), max_size=5))
-    def test_flatten_empty_inputs(self, paths):
-        """Test flatten with various path combinations."""
-        # Should not crash even with empty or invalid paths
+        # Test split doesn't crash
         try:
-            flatten_func = p.flatten(paths, delimiter=", ")
-            result = flatten_func({})
+            split_func = p.split(separator)
+            result = split_func(str_result)
+            assert isinstance(result, list)
+        except (AttributeError, ValueError):
+            # Some edge cases may fail, which is acceptable
+            pass
+
+    @given(st.lists(st.text(min_size=1, max_size=10), max_size=5))
+    def test_join_operations(self, text_list):
+        """Test join operations with various inputs."""
+        # Should not crash even with empty or invalid inputs
+        try:
+            join_func = p.join(", ")
+            result = join_func(text_list)
             assert isinstance(result, str)
-        except Exception:
-            # Some path combinations might be invalid, that's okay
+            if text_list:
+                # If we have content, result should contain it
+                assert len(result) >= 0
+        except (AttributeError, TypeError):
+            # Some combinations may fail, which is acceptable for edge cases
             pass

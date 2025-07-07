@@ -47,24 +47,39 @@ class TestPiperBasic:
         assert result["status"] == "processed"
 
     def test_callable_mapping_with_partials(self) -> None:
-        """Test Piper with callable mapping using partials API."""
+        """Test Piper with callable mapping using simplified partials API."""
 
         def mapper(data: dict) -> dict:
-            # Use new partials API
-            name_template = p.template("{} {}")
-            status_classifier = p.get("status") >> p.case(
-                {"active": "✓ Active", "inactive": "✗ Inactive"}, default="Unknown"
-            )
+            # Use simplified partials API
+            get_first = p.get("firstName")
+            get_last = p.get("lastName")
+
+            # Status mapping using simple approach
+            status_map = {"active": "✓ Active", "inactive": "✗ Inactive"}
+            status_value = get(data, "status", default="unknown")
+            status_display = status_map.get(status_value, "Unknown")
+
+            # City extraction
             city_extractor = p.get("address") >> p.split("|") >> p.at_index(1)
 
+            # Simple name concatenation
+            first_name = get_first(data) or ""
+            last_name = get_last(data) or ""
+            full_name = f"{first_name} {last_name}".strip()
+
+            # Join codes
+            codes = get(data, "codes", default=[])
+            all_codes = ", ".join(str(c) for c in codes) if codes else ""
+
+            # Backup name - first available value
+            backup_name = get(data, "nickname") or get(data, "firstName") or "Guest"
+
             return {
-                "name": name_template(get(data, "firstName"), get(data, "lastName")),
-                "status_display": status_classifier(data),
-                "all_codes": p.flatten(["codes"], delimiter=", ")(data),
+                "name": full_name,
+                "status_display": status_display,
+                "all_codes": all_codes,
                 "city": city_extractor(data),
-                "backup_name": p.coalesce("nickname", "firstName", default="Guest")(
-                    data
-                ),
+                "backup_name": backup_name,
             }
 
         piper = Piper(mapper)
