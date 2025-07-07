@@ -1,7 +1,7 @@
 from typing import Generic, Optional, Tuple, TypeVar
 
 from .data_mapping import DataMapping
-from .recordset import RecordSet
+from .dict_group import DictGroup
 
 """
 A `Piper` class that executes DataMapping transformations.
@@ -38,7 +38,7 @@ class Piper(Generic[InputT, OutputT]):
 
         self._mode = "lens" if data_mapping.bidirectional else "view"
 
-    def forward(self, data: InputT) -> OutputT | Tuple[OutputT, RecordSet]:
+    def forward(self, data: InputT) -> OutputT | Tuple[OutputT, DictGroup]:
         """Apply forward transformation (alias for run)."""
         # Type validation in strict mode
         if self.strict and not isinstance(data, self.source_type):
@@ -49,7 +49,7 @@ class Piper(Generic[InputT, OutputT]):
         return self.data_mapping.forward(data)
 
     def reverse(
-        self, output_data: OutputT, spillover: Optional[RecordSet] = None
+        self, output_data: OutputT, spillover: Optional[DictGroup] = None
     ) -> InputT:
         """Apply reverse transformation (only available for bidirectional DataMapping)."""
         if not self.data_mapping.bidirectional:
@@ -57,12 +57,12 @@ class Piper(Generic[InputT, OutputT]):
                 "Reverse transformation only available for bidirectional mappings"
             )
 
-        return self.data_mapping.reverse(output_data, spillover or RecordSet())
+        return self.data_mapping.reverse(output_data, spillover or DictGroup())
 
     def can_reverse(self) -> bool:
         """Check if this piper supports reverse transformation."""
         return self.data_mapping.can_reverse()
 
-    def __call__(self, data: InputT) -> OutputT | Tuple[OutputT, RecordSet]:
+    def __call__(self, data: InputT) -> OutputT | Tuple[OutputT, DictGroup]:
         """Make Piper callable."""
         return self.forward(data)

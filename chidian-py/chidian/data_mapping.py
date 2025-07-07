@@ -7,8 +7,8 @@ from typing import Any, Callable, Optional, Tuple, Type, TypeVar
 from pydantic import BaseModel
 
 from .chidian_rs import get
+from .dict_group import DictGroup
 from .lib import put
-from .recordset import RecordSet
 
 # Type variables for generic models
 SourceT = TypeVar("SourceT", bound=BaseModel)
@@ -60,7 +60,7 @@ class DataMapping:
         else:
             self._setup_unidirectional_mapping(mapping)
 
-    def forward(self, source: SourceT | dict) -> TargetT | Tuple[TargetT, RecordSet]:
+    def forward(self, source: SourceT | dict) -> TargetT | Tuple[TargetT, DictGroup]:
         """
         Transform source model to target model.
 
@@ -69,7 +69,7 @@ class DataMapping:
 
         Returns:
             - Unidirectional mode: Instance of target_model
-            - Bidirectional mode: Tuple of (target_model, spillover RecordSet)
+            - Bidirectional mode: Tuple of (target_model, spillover DictGroup)
         """
         validated_source: SourceT = self._validate_and_convert_source(source)
         source_dict = self._convert_to_dict(validated_source)
@@ -79,7 +79,7 @@ class DataMapping:
         else:
             return self._forward_unidirectional(source_dict)
 
-    def reverse(self, target: TargetT, spillover: Optional[RecordSet] = None) -> Any:
+    def reverse(self, target: TargetT, spillover: Optional[DictGroup] = None) -> Any:
         """
         Reverse transformation (target to source). Only available in bidirectional mode.
 
@@ -223,7 +223,7 @@ class DataMapping:
         """Convert source model to dictionary for processing."""
         return source.model_dump() if hasattr(source, "model_dump") else source
 
-    def _forward_bidirectional(self, source_dict: dict) -> Tuple[TargetT, RecordSet]:
+    def _forward_bidirectional(self, source_dict: dict) -> Tuple[TargetT, DictGroup]:
         """Handle forward transformation in bidirectional mode."""
         target_data, mapped_paths = self._apply_bidirectional_mappings(source_dict)
         target = self.target_model.model_validate(target_data)
@@ -251,10 +251,10 @@ class DataMapping:
 
         return target_data, mapped_paths
 
-    def _create_spillover(self, source_dict: dict, mapped_paths: set[str]) -> RecordSet:
-        """Create spillover RecordSet from unmapped data."""
+    def _create_spillover(self, source_dict: dict, mapped_paths: set[str]) -> DictGroup:
+        """Create spillover DictGroup from unmapped data."""
         spillover_data = self._collect_spillover(source_dict, mapped_paths)
-        return RecordSet([spillover_data]) if spillover_data else RecordSet()
+        return DictGroup([spillover_data]) if spillover_data else DictGroup()
 
     def _forward_unidirectional(self, source_dict: dict) -> Any:
         """Handle forward transformation in unidirectional mode."""

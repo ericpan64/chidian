@@ -4,7 +4,7 @@ from typing import Optional
 
 import pytest
 from chidian import DataMapping
-from chidian.recordset import RecordSet
+from chidian.dict_group import DictGroup
 from pydantic import BaseModel
 
 
@@ -222,7 +222,7 @@ class TestDataMappingBidirectionalReverse:
         )
 
         obs = Observation(subject_ref="123", performer="John")
-        spillover = RecordSet([{"active": True, "age": 45}])
+        spillover = DictGroup([{"active": True, "age": 45}])
 
         patient = mapping.reverse(obs, spillover)
 
@@ -242,7 +242,7 @@ class TestDataMappingBidirectionalReverse:
         )
 
         obs = Observation(subject_ref="123", performer="John")
-        spillover = RecordSet([{"active": True}])  # Provide required field
+        spillover = DictGroup([{"active": True}])  # Provide required field
 
         patient = mapping.reverse(obs, spillover)
 
@@ -262,7 +262,7 @@ class TestDataMappingBidirectionalReverse:
         target = NestedTarget(
             subject_id="123", subject_name="John", created_by="system"
         )
-        spillover = RecordSet(
+        spillover = DictGroup(
             [
                 {
                     "patient": {"age": 45},
@@ -388,7 +388,7 @@ class TestDataMappingBidirectionalReversibility:
         )
 
         obs = Observation(subject_ref="123", performer="John")
-        spillover = RecordSet()
+        spillover = DictGroup()
 
         with pytest.raises(ValueError, match="cannot reverse"):
             mapping.reverse(obs, spillover)

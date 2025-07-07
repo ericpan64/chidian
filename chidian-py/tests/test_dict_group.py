@@ -1,8 +1,8 @@
-from chidian.recordset import RecordSet
+from chidian.dict_group import DictGroup
 
 
 def test_basic_collection():
-    """Test basic RecordSet functionality."""
+    """Test basic DictGroup functionality."""
     # Create from list
     items = [
         {"id": "p1", "name": "John", "age": 30},
@@ -10,7 +10,7 @@ def test_basic_collection():
         {"id": "p3", "name": "Bob", "age": 35},
     ]
 
-    collection = RecordSet(items)
+    collection = DictGroup(items)
 
     # Test length
     assert len(collection) == 3
@@ -26,7 +26,7 @@ def test_basic_collection():
 
 def test_dict_access_and_get_all():
     """Test built-in dict access and get_all method."""
-    collection = RecordSet(
+    collection = DictGroup(
         [
             {"patient": {"id": "123", "name": "John"}, "status": "active"},
             {"patient": {"id": "456", "name": "Jane"}, "status": "inactive"},
@@ -65,7 +65,7 @@ def test_dict_access_and_get_all():
 
 def test_filter_method():
     """Test the filter method."""
-    collection = RecordSet(
+    collection = DictGroup(
         [
             {"name": "John", "age": 30, "active": True},
             {"name": "Jane", "age": 25, "active": False},
@@ -99,7 +99,7 @@ def test_filter_method():
 
 def test_map_method():
     """Test the map method."""
-    collection = RecordSet([{"name": "John", "age": 30}, {"name": "Jane", "age": 25}])
+    collection = DictGroup([{"name": "John", "age": 30}, {"name": "Jane", "age": 25}])
 
     # Transform to add computed field
     enhanced = collection.map(lambda x: {**x, "adult": x.get("age", 0) >= 18})
@@ -110,7 +110,7 @@ def test_map_method():
 
 def test_to_json():
     """Test JSON serialization."""
-    collection = RecordSet([{"id": 1, "name": "Test"}, {"id": 2, "name": "Another"}])
+    collection = DictGroup([{"id": 1, "name": "Test"}, {"id": 2, "name": "Another"}])
 
     # As dict
     json_str = collection.to_json()
@@ -125,7 +125,7 @@ def test_to_json():
 
 def test_append_method():
     """Test appending items to collection."""
-    collection = RecordSet()
+    collection = DictGroup()
 
     # Append with auto-generated key
     collection.append({"name": "John"})
@@ -148,7 +148,7 @@ def test_append_method():
 
 def test_complex_nested_access():
     """Test complex nested data access."""
-    collection = RecordSet(
+    collection = DictGroup(
         [
             {
                 "patient": {

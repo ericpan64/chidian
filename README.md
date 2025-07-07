@@ -72,7 +72,7 @@ See the [tests](/chidian-py/tests) for some use-cases.
 | **Piper**        | Runtime engine for executing DataMapping transformations between Pydantic models. |
 | **DataMapping**  | Unidirectional or bidirectional mappings between Pydantic models with callable logic support. |
 | **Partials API** | `>>` operator chains (`split >> last >> upper`) keep lambdas away.           |
-| **RecordSet**    | Lightweight collection class: `select`, `filter`, `to_json`, arrow export.   |
+| **DictGroup**    | Lightweight collection class: `select`, `filter`, `to_json`, arrow export.   |
 | **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |
 
 

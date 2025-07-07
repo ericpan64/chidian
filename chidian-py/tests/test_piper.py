@@ -4,7 +4,7 @@ from typing import Any
 
 import chidian.partials as p
 import pytest
-from chidian import DataMapping, Piper, RecordSet, get
+from chidian import DataMapping, DictGroup, Piper, get
 
 from tests.structstest import (
     Observation,
@@ -164,7 +164,7 @@ class TestPiperUnidirectional:
 
         # Reverse should fail
         with pytest.raises(ValueError, match="Reverse transformation only available"):
-            piper.reverse(obs, RecordSet())
+            piper.reverse(obs, DictGroup())
 
         assert piper.can_reverse() is False
 
@@ -242,7 +242,7 @@ class TestPiperBidirectional:
         assert obs.subject_ref == "123"
         assert obs.performer == "John"
 
-        assert isinstance(spillover, RecordSet)
+        assert isinstance(spillover, DictGroup)
         spillover_data = spillover._items[0]
         assert spillover_data["active"] is True
         assert spillover_data["age"] == 45
@@ -258,7 +258,7 @@ class TestPiperBidirectional:
         piper: Piper = Piper(mapping)
 
         obs = Observation(subject_ref="123", performer="John")
-        spillover = RecordSet([{"active": True, "age": 45}])
+        spillover = DictGroup([{"active": True, "age": 45}])
 
         patient = piper.reverse(obs, spillover)
 

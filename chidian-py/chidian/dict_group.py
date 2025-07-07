@@ -4,7 +4,7 @@ from typing import Any, Callable, Iterator, Optional, Union
 from .chidian_rs import get
 
 """
-A `RecordSet` is aconvenient wrapper around dict[str, dict] for managing collections of dictionary data.
+A `DictGroup` is aconvenient wrapper around dict[str, dict] for managing collections of dictionary data.
 
 Think of it as a group of dictionaries where you can `get` (with inter-dictionary references) and `select` from them as a group!
 
@@ -15,14 +15,14 @@ Supports path-based queries, filtering, mapping, and other functional operations
 """
 
 
-class RecordSet(dict):
+class DictGroup(dict):
     def __init__(
         self,
         items: Union[list[dict[str, Any]], dict[str, dict[str, Any]], None] = None,
         **kwargs,
     ):
         """
-        Initialize a RecordSet from a list or dict of dictionaries.
+        Initialize a DictGroup from a list or dict of dictionaries.
 
         Args:
             items: Either a list of dicts (auto-keyed by index) or a dict of dicts
@@ -76,143 +76,6 @@ class RecordSet(dict):
             results.append(value)
         return results
 
-    def select(
-        self,
-        fields: str = "*",
-        where: Optional[Callable[[dict], bool]] = None,
-        flat: bool = False,
-        sparse: str = "preserve",
-    ):
-        """
-        # TODO: Use the PEG grammar instead of custom parsing (refer to old `pydian` impl which is in separate repo)
-
-        Select fields from the collection with optional filtering and sparse data handling.
-
-        Examples:
-            collection.select("name, age")                    # Select specific fields, None for missing
-            collection.select("patient.name, patient.id")     # Nested paths
-            collection.select("patient.*")                    # All from nested object
-            collection.select("*", where=lambda x: x.get("active") is not None)
-            collection.select("name", flat=True)              # Return flat list
-            collection.select("patient.id", sparse="filter")  # Filter out items with None values
-
-        Args:
-            fields: Field specification ("*", "field1, field2", "nested.*")
-            where: Optional filter predicate
-            flat: If True and single field, return list instead of RecordSet
-            sparse: How to handle missing values ("preserve", "filter")
-                   - "preserve": Keep items with None values (default for structure preservation)
-                   - "filter": Remove items/fields with None values (default for aggregations)
-
-        Returns:
-            RecordSet with query results, or list if flat=True
-        """
-        # TODO: This function is way too big (though understandably so)... split this up into parsing step + execution functions
-        # Parse field specification
-        field_list: tuple[str, str] | list[str] | None
-        if fields == "*":
-            field_list = None  # Keep all fields
-        elif ".*" in fields:
-            # Handle nested wildcard (e.g., "patient.*")
-            nested_path = fields.replace(".*", "")
-            field_list = ("wildcard", nested_path)
-        else:
-            # Parse comma-separated fields
-            field_list = [f.strip() for f in fields.split(",")]
-
-        # Process each item
-        result_items = []
-        result_keys = []
-
-        for i, item in enumerate(self._items):
-            # Apply filter if provided
-            if where is not None and not where(item):
-                continue
-
-            # Extract fields based on specification
-            if field_list is None:
-                # Keep all fields (*)
-                result_item = item.copy()
-            elif isinstance(field_list, tuple) and field_list[0] == "wildcard":
-                # Handle "nested.*" syntax
-                nested_path = field_list[1]
-                nested_obj = get(item, nested_path, default=None)
-
-                if sparse == "preserve":
-                    # Always include, even if None or empty
-                    if isinstance(nested_obj, dict):
-                        result_item = nested_obj.copy()
-                    else:
-                        result_item = (
-                            {} if nested_obj is None else {"value": nested_obj}
-                        )
-                elif sparse == "filter":
-                    # Only include if non-empty dict
-                    if isinstance(nested_obj, dict) and nested_obj:
-                        result_item = nested_obj.copy()
-                    else:
-                        continue
-            elif len(field_list) == 1 and flat:
-                # Single field with flat=True - collect for flat list
-                value = get(item, field_list[0], default=None)
-                if sparse == "preserve":
-                    # Include even if None
-                    result_items.append(value)
-                elif sparse == "filter" and value is not None:
-                    # Only include non-None values
-                    result_items.append(value)
-                continue
-            else:
-                # Multiple specific fields
-                result_item = {}
-                for field in field_list:
-                    value = get(item, field, default=None)
-                    key_name = field.split(".")[-1] if "." in field else field
-
-                    if sparse == "preserve":
-                        # Always include the field, even if None
-                        result_item[key_name] = value
-                    elif sparse == "filter" and value is not None:
-                        # Only include non-None values
-                        result_item[key_name] = value
-
-                # For "filter" mode, skip items with no valid fields
-                if sparse == "filter" and not result_item:
-                    continue
-
-            result_items.append(result_item)
-
-            # Preserve the original key for this item
-            original_key = None
-            for key, val in self.items():
-                if val is item:
-                    original_key = key
-                    break
-            result_keys.append(original_key)
-
-        # Return based on flat parameter
-        if flat and isinstance(field_list, list) and len(field_list) == 1:
-            return result_items
-
-        # Create new RecordSet preserving structure
-        result = RecordSet()
-        result._items = result_items
-
-        # Preserve original keys
-        for i, (item, key) in enumerate(zip(result_items, result_keys)):
-            if key is not None:
-                if key.startswith("$") and key[1:].isdigit():
-                    # Reindex numeric keys based on new position
-                    result[f"${i}"] = item
-                else:
-                    # Preserve custom keys
-                    result[key] = item
-            else:
-                # Fallback to numeric key
-                result[f"${i}"] = item
-
-        return result
-
     def to_json(self, as_list: bool = False, indent: Optional[int] = None) -> str:
         """
         Export collection as JSON string.
@@ -247,7 +110,7 @@ class RecordSet(dict):
 
         self[key] = item
 
-    def filter(self, predicate: Callable[[dict], bool]) -> "RecordSet":
+    def filter(self, predicate: Callable[[dict], bool]) -> "DictGroup":
         """
         Filter items based on a predicate function.
 
@@ -255,12 +118,12 @@ class RecordSet(dict):
             predicate: Function returning True for items to keep
 
         Returns:
-            New filtered RecordSet
+            New filtered DictGroup
         """
         filtered_items = [item for item in self._items if predicate(item)]
 
         # Create new collection with filtered items
-        result = RecordSet()
+        result = DictGroup()
         result._items = filtered_items
 
         # First pass: add all items with numeric keys
@@ -277,7 +140,7 @@ class RecordSet(dict):
 
         return result
 
-    def map(self, transform: Callable[[dict], dict]) -> "RecordSet":
+    def map(self, transform: Callable[[dict], dict]) -> "DictGroup":
         """
         Transform each item in the collection.
 
@@ -285,12 +148,12 @@ class RecordSet(dict):
             transform: Function to apply to each item
 
         Returns:
-            New RecordSet with transformed items
+            New DictGroup with transformed items
         """
         transformed = [transform(item) for item in self._items]
 
         # Create new collection
-        result = RecordSet()
+        result = DictGroup()
         result._items = transformed
 
         # Map old items to their indices for lookup
