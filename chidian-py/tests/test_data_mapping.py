@@ -1,8 +1,7 @@
-"""Test the unified DataMapping class."""
+"""Test the new DataMapping class as forward-only validator."""
 
-from typing import Any, Optional
+from typing import Optional
 
-import chidian.partials as p
 import pytest
 from chidian import DataMapping, Piper
 from pydantic import BaseModel
@@ -23,246 +22,219 @@ class Observation(BaseModel):
     status: Optional[str] = None
 
 
-class TestDataMappingUnidirectional:
-    """Test DataMapping in unidirectional mode (without spillover)."""
+class TestDataMappingBasic:
+    """Test basic DataMapping functionality as forward-only validator."""
 
-    def test_simple_mapping(self) -> None:
-        """Test basic field mapping."""
+    def test_simple_mapping_with_piper(self) -> None:
+        """Test DataMapping with Piper for basic field mapping."""
+        # Create a Piper for transformation
+        piper = Piper({"subject_ref": "id", "performer": "name"})
+
+        # Create DataMapping with Piper and schemas
         mapping = DataMapping(
-            source_model=Patient,
-            target_model=Observation,
-            mapping={"subject_ref": "id", "performer": "name"},
-            bidirectional=False,
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
         )
 
         patient = Patient(id="123", name="John", active=True)
-        obs: Any = mapping.forward(patient)
+        obs = mapping.forward(patient)
 
         assert isinstance(obs, Observation)
         assert obs.subject_ref == "123"
         assert obs.performer == "John"
 
-    def test_complex_mapping(self) -> None:
-        """Test mapping with transformations."""
+    def test_complex_mapping_with_callable_piper(self) -> None:
+        """Test DataMapping with callable Piper for complex transformations."""
+
+        def transform_fn(data: dict) -> dict:
+            return {
+                "subject_ref": f"Patient/{data['id']}",
+                "performer": data["name"].upper(),
+                "status": "active" if data["active"] else "inactive",
+            }
+
+        piper = Piper(transform_fn)
+
         mapping = DataMapping(
-            source_model=Patient,
-            target_model=Observation,
-            mapping={  # type: ignore
-                "subject_ref": p.get("id") >> p.format_string("Patient/{}"),
-                "performer": p.get("name") >> p.upper,
-                "status": p.get("active")
-                >> p.case({True: "active", False: "inactive"}, default="unknown"),
-            },
-            bidirectional=False,
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
         )
 
         patient = Patient(id="123", name="john", active=True)
-        obs: Any = mapping.forward(patient)
+        obs = mapping.forward(patient)
 
         assert obs.subject_ref == "Patient/123"
         assert obs.performer == "JOHN"
         assert obs.status == "active"
 
-    def test_reverse_not_available(self) -> None:
-        """Test that reverse is not available in unidirectional mode."""
+    def test_no_reverse_functionality(self) -> None:
+        """Test that DataMapping doesn't support reverse operations."""
+        piper = Piper({"subject_ref": "id", "performer": "name"})
         mapping = DataMapping(
-            source_model=Patient,
-            target_model=Observation,
-            mapping={
-                "subject_ref": "id",
-                "performer": "name",  # Add required field
-            },
-            bidirectional=False,
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
         )
 
-        obs = Observation(subject_ref="123", performer="John")
+        # Should not have reverse method
+        assert not hasattr(mapping, "reverse")
 
-        with pytest.raises(
-            RuntimeError, match="reverse.*only available in bidirectional mode"
-        ):
-            mapping.reverse(obs)
-
-        assert not mapping.is_reversible()
-        assert not mapping.can_reverse()
-
-
-class TestDataMappingBidirectional:
-    """Test DataMapping in bidirectional mode (Lens)."""
-
-    def test_simple_bidirectional(self) -> None:
-        """Test basic bidirectional mapping."""
-        mapping = DataMapping(
-            source_model=Patient,
-            target_model=Observation,
-            mapping={"id": "subject_ref", "name": "performer"},
-            bidirectional=True,
-        )
-
-        # Forward
-        patient = Patient(id="123", name="John", active=True)
-        obs: Any
-        obs, spillover = mapping.forward(patient)
-
-        assert isinstance(obs, Observation)
-        assert obs.subject_ref == "123"
-        assert obs.performer == "John"
-
-        # Check spillover
-        assert len(spillover) == 1
-        assert spillover._items[0]["active"] is True
-
-        # Reverse
-        recovered = mapping.reverse(obs, spillover)
-        assert isinstance(recovered, Patient)
-        assert recovered.id == "123"
-        assert recovered.name == "John"
-        assert recovered.active is True
-
-    def test_invalid_bidirectional_mapping(self) -> None:
-        """Test that non-string mappings are rejected in bidirectional mode."""
-        with pytest.raises(
-            TypeError, match="Bidirectional mappings must be string-to-string"
-        ):
-            DataMapping(
-                source_model=Patient,
-                target_model=Observation,
-                mapping={  # type: ignore
-                    "id": lambda x: x[
-                        "subject_ref"
-                    ]  # Function not allowed  # type: ignore
-                },
-                bidirectional=True,
-            )
-
-    def test_non_reversible_mapping(self) -> None:
-        """Test detection of non-reversible mappings."""
-        # Many-to-one mapping
-        with pytest.raises(ValueError, match="not reversible.*duplicate target paths"):
-            DataMapping(
-                source_model=Patient,
-                target_model=Observation,
-                mapping={
-                    "id": "subject_ref",
-                    "name": "subject_ref",  # Duplicate target
-                },
-                bidirectional=True,
-                strict=True,
-            )
-
-    def test_roundtrip(self) -> None:
-        """Test lossless roundtrip transformation."""
-        mapping = DataMapping(
-            source_model=Patient,
-            target_model=Observation,
-            mapping={"id": "subject_ref", "name": "performer"},
-            bidirectional=True,
-        )
-
-        original = Patient(
-            id="456", name="Jane", active=False, internal_notes="Important", age=30
-        )
-
-        # Forward and reverse
-        target: Any
-        target, spillover = mapping.forward(original)
-        recovered = mapping.reverse(target, spillover)
-
-        # Should be identical
-        assert recovered.model_dump() == original.model_dump()
-
-
-class TestDataMappingWithPiper:
-    """Test DataMapping integration with Piper."""
-
-    def test_piper_unidirectional(self) -> None:
-        """Test Piper with unidirectional DataMapping."""
-
-        mapping = DataMapping(
-            source_model=Patient,
-            target_model=Observation,
-            mapping={"subject_ref": "id", "performer": "name"},
-            bidirectional=False,
-        )
-
-        piper: Piper = Piper(mapping)
-
-        patient = Patient(id="123", name="John", active=True)
-        obs = piper(patient)
-
-        assert isinstance(obs, Observation)
-        assert obs.subject_ref == "123"
-        assert obs.performer == "John"
-
-        # Should not be reversible
-        assert not piper.can_reverse()
-
-    def test_piper_bidirectional(self) -> None:
-        """Test Piper with bidirectional DataMapping."""
-
-        mapping = DataMapping(
-            source_model=Patient,
-            target_model=Observation,
-            mapping={"id": "subject_ref", "name": "performer"},
-            bidirectional=True,
-        )
-
-        piper: Piper = Piper(mapping)
-
-        # Forward
-        patient = Patient(id="123", name="John", active=True)
-        obs, spillover = piper(patient)
-
-        assert isinstance(obs, Observation)
-        assert obs.subject_ref == "123"
-
-        # Should be reversible
-        assert piper.can_reverse()
-
-        # Reverse
-        recovered = piper.reverse(obs, spillover)
-        assert recovered.id == "123"
-        assert recovered.name == "John"
+        # Should not have can_reverse method
+        assert not hasattr(mapping, "can_reverse")
 
 
 class TestDataMappingValidation:
-    """Test validation features."""
+    """Test DataMapping validation features."""
 
-    def test_strict_mode_validation(self) -> None:
-        """Test strict mode enforces required fields."""
+    def test_input_validation(self) -> None:
+        """Test that DataMapping validates input against input schema."""
+        piper = Piper({"subject_ref": "id", "performer": "name"})
+        mapping = DataMapping(
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
+        )
 
-        class Source(BaseModel):
-            id: str
+        # Valid input works
+        patient = Patient(id="123", name="John", active=True)
+        obs = mapping.forward(patient)
+        assert obs.subject_ref == "123"
 
-        class Target(BaseModel):
-            id: str
-            required_field: str  # Required but not mapped
+        # Invalid input should raise ValidationError
+        with pytest.raises(Exception):  # Pydantic ValidationError
+            mapping.forward({"invalid": "data"})
 
-        # Should raise in strict mode
-        with pytest.raises(ValueError, match="Missing required target fields"):
+    def test_output_validation(self) -> None:
+        """Test that DataMapping validates output against output schema."""
+
+        # Piper that produces invalid output
+        def bad_transform(data: dict) -> dict:
+            return {"invalid_field": "value"}  # Missing required fields
+
+        piper = Piper(bad_transform)
+        mapping = DataMapping(
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
+        )
+
+        patient = Patient(id="123", name="John", active=True)
+
+        # Should raise ValidationError due to invalid output
+        with pytest.raises(Exception):  # Pydantic ValidationError
+            mapping.forward(patient)
+
+    def test_schema_validation(self) -> None:
+        """Test that DataMapping validates schema types."""
+        piper = Piper({"output": "input"})
+
+        # Non-Pydantic schema should raise TypeError
+        with pytest.raises(TypeError):
             DataMapping(
-                source_model=Source,
-                target_model=Target,
-                mapping={"id": "id"},
-                bidirectional=False,
-                strict=True,
+                piper=piper,
+                input_schema=dict,  # type: ignore  # Not a Pydantic model
+                output_schema=Observation,
             )
 
-        # Should work in non-strict mode
+        with pytest.raises(TypeError):
+            DataMapping(
+                piper=piper,
+                input_schema=Patient,
+                output_schema=dict,  # type: ignore  # Not a Pydantic model
+            )
+
+    def test_dict_input_with_strict_mode(self) -> None:
+        """Test handling of dict input in strict mode."""
+        piper = Piper({"subject_ref": "id", "performer": "name"})
         mapping = DataMapping(
-            source_model=Source,
-            target_model=Target,
-            mapping={"id": "id"},
-            bidirectional=False,
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
+            strict=True,
+        )
+
+        # Dict input should be validated and converted
+        dict_input = {"id": "123", "name": "John", "active": True}
+        obs = mapping.forward(dict_input)
+        assert obs.subject_ref == "123"
+        assert obs.performer == "John"
+
+    def test_non_strict_mode(self) -> None:
+        """Test behavior in non-strict mode."""
+        piper = Piper({"subject_ref": "id", "performer": "name"})
+        mapping = DataMapping(
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
             strict=False,
         )
-        assert mapping.strict is False
 
-    def test_type_validation(self) -> None:
-        """Test that non-Pydantic models are rejected."""
-        with pytest.raises(TypeError, match="must be a Pydantic v2 BaseModel"):
-            DataMapping(
-                source_model=dict,  # Not a Pydantic model
-                target_model=BaseModel,
-                mapping={},
-                bidirectional=False,
-            )
+        # Should still work with valid input
+        patient = Patient(id="123", name="John", active=True)
+        obs = mapping.forward(patient)
+        assert obs.subject_ref == "123"
+
+
+class TestDataMappingWithPiper:
+    """Test DataMapping integration with different Piper types."""
+
+    def test_with_dict_piper(self) -> None:
+        """Test DataMapping with dict-based Piper."""
+        piper = Piper({"subject_ref": "id", "performer": "name"})
+        mapping = DataMapping(
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
+        )
+
+        patient = Patient(id="123", name="John", active=True)
+        obs = mapping.forward(patient)
+
+        assert isinstance(obs, Observation)
+        assert obs.subject_ref == "123"
+        assert obs.performer == "John"
+
+    def test_with_callable_piper(self) -> None:
+        """Test DataMapping with callable Piper."""
+
+        def transform_fn(data: dict) -> dict:
+            return {
+                "subject_ref": data["id"],
+                "performer": data["name"],
+                "status": "processed",
+            }
+
+        piper = Piper(transform_fn)
+        mapping = DataMapping(
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
+        )
+
+        patient = Patient(id="123", name="John", active=True)
+        obs = mapping.forward(patient)
+
+        assert obs.subject_ref == "123"
+        assert obs.performer == "John"
+        assert obs.status == "processed"
+
+    def test_piper_independence(self) -> None:
+        """Test that Piper works independently of DataMapping."""
+        piper = Piper({"output": "input"})
+
+        # Piper should work standalone
+        result = piper({"input": "test"})
+        assert result["output"] == "test"
+
+        # Same Piper can be used with DataMapping
+        _ = DataMapping(
+            piper=piper,
+            input_schema=Patient,
+            output_schema=Observation,
+        )
+
+        # Both should work independently
+        direct_result = piper({"input": "direct"})
+        assert direct_result["output"] == "direct"

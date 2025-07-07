@@ -1,68 +1,65 @@
-from typing import Generic, Optional, Tuple, TypeVar
+from typing import Any, Callable, Union
 
-from .data_mapping import DataMapping
-from .dict_group import DictGroup
+from .chidian_rs import get  # type: ignore
 
 """
-A `Piper` class that executes DataMapping transformations.
+A `Piper` class for independent dict-to-dict transformations.
 
-The Piper class is a runtime that executes DataMapping instances.
-DataMapping defines WHAT to map, Piper defines HOW to execute it.
-
-As a Piper processes data, it will consume SEEDs and apply them to the data accordingly.
-Uses a two-pass approach: first mapping, then cleanup of SEED directives.
+The Piper class performs pure data transformations without schema validation.
+It takes either a dictionary mapping or a callable function and applies it to input data.
 """
 
-# Type variables for generic typing
-InputT = TypeVar("InputT")
-OutputT = TypeVar("OutputT")
 
-
-class Piper(Generic[InputT, OutputT]):
-    def __init__(self, data_mapping: "DataMapping"):
+class Piper:
+    def __init__(
+        self, mapping: Union[dict[str, Any], Callable[[dict[str, Any]], dict[str, Any]]]
+    ):
         """
-        Initialize a Piper for executing DataMapping transformations.
+        Initialize a Piper for dict-to-dict transformations.
 
         Args:
-            data_mapping: A DataMapping instance that defines the transformation
+            mapping: Either a dictionary mapping {"target_field": "source_path"}
+                    or a callable function that transforms dict -> dict
         """
-        self.data_mapping = data_mapping
-
-        # Set up type and mode information
-        self.source_type = data_mapping.source_model
-        self.target_type = data_mapping.target_model
-        # Compatibility aliases
-        self.input_type = self.source_type
-        self.output_type = self.target_type
-        self.strict = data_mapping.strict
-
-        self._mode = "lens" if data_mapping.bidirectional else "view"
-
-    def forward(self, data: InputT) -> OutputT | Tuple[OutputT, DictGroup]:
-        """Apply forward transformation (alias for run)."""
-        # Type validation in strict mode
-        if self.strict and not isinstance(data, self.source_type):
+        if not (isinstance(mapping, dict) or callable(mapping)):
             raise TypeError(
-                f"Expected {self.source_type.__name__}, got {type(data).__name__}"
+                f"Mapping must be dict or callable, got {type(mapping).__name__}"
             )
 
-        return self.data_mapping.forward(data)
+        self.mapping = mapping
 
-    def reverse(
-        self, output_data: OutputT, spillover: Optional[DictGroup] = None
-    ) -> InputT:
-        """Apply reverse transformation (only available for bidirectional DataMapping)."""
-        if not self.data_mapping.bidirectional:
-            raise ValueError(
-                "Reverse transformation only available for bidirectional mappings"
-            )
+    def forward(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Apply the transformation to input data."""
+        if callable(self.mapping):
+            return self._apply_callable_mapping(data)
+        else:
+            return self._apply_dict_mapping(data)
 
-        return self.data_mapping.reverse(output_data, spillover or DictGroup())
+    def _apply_callable_mapping(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Apply callable mapping to data."""
+        # Type assertion for mypy
+        assert callable(self.mapping)
+        return self.mapping(data)  # type: ignore
 
-    def can_reverse(self) -> bool:
-        """Check if this piper supports reverse transformation."""
-        return self.data_mapping.can_reverse()
+    def _apply_dict_mapping(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Apply dictionary mapping to data."""
+        result = {}
 
-    def __call__(self, data: InputT) -> OutputT | Tuple[OutputT, DictGroup]:
+        # Type assertion for mypy
+        assert isinstance(self.mapping, dict)
+        for target_field, mapping_spec in self.mapping.items():
+            if isinstance(mapping_spec, str):
+                # Simple path mapping
+                result[target_field] = get(data, mapping_spec)
+            elif callable(mapping_spec):
+                # Callable mapping (lambda, partial, etc.)
+                result[target_field] = mapping_spec(data)
+            else:
+                # Direct value
+                result[target_field] = mapping_spec
+
+        return result
+
+    def __call__(self, data: dict[str, Any]) -> dict[str, Any]:
         """Make Piper callable."""
         return self.forward(data)

@@ -65,9 +65,9 @@ class TestSeedsWithDataMapping:
                 "is_active": get(data, "data.patient.active"),
             }
 
-        data_mapping = DataMapping(SourceData, SimpleTarget, mapping)
-        piper: Piper = Piper(data_mapping)
-        result = piper(SourceData.model_validate(simple_data))
+        piper = Piper(mapping)
+        data_mapping = DataMapping(piper, SourceData, SimpleTarget)
+        result = data_mapping.forward(SourceData.model_validate(simple_data))
 
         assert isinstance(result, SimpleTarget)
         assert result.patient_id == "abc123"
@@ -91,11 +91,11 @@ class TestSeedsWithDataMapping:
                 "regular_value": "regular_string",
             }
 
-        data_mapping = DataMapping(SourceData, KeepTestTarget, mapping)
-        piper: Piper = Piper(data_mapping)
+        piper = Piper(mapping)
+        data_mapping = DataMapping(piper, SourceData, KeepTestTarget)
 
         source = SourceData(data={})
-        result = piper(source)
+        result = data_mapping.forward(source)
 
         # Manually processed KEEP objects work
         assert isinstance(result, KeepTestTarget)
@@ -154,13 +154,11 @@ class TestSeedsWithDataMapping:
                 "last_previous_address": last_previous,
             }
 
-        data_mapping = DataMapping(
-            ComplexPersonData, FlatPersonData, complex_to_flat_mapping
-        )
-        piper: Piper = Piper(data_mapping)
+        piper = Piper(complex_to_flat_mapping)
+        data_mapping = DataMapping(piper, ComplexPersonData, FlatPersonData)
 
         source = ComplexPersonData.model_validate(test_A)
-        result = piper(source)
+        result = data_mapping.forward(source)
 
         assert isinstance(result, FlatPersonData)
         assert "Bob" in result.full_name
