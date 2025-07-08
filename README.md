@@ -2,9 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> Declarative, type‑safe data mapping for humans. Backed by Rust speed and the Pydantic ecosystem.
+> Declarative, type-safe data mapping for humans. **Powered by a Rust core with ergonomic Python bindings.**
 
-chidian is a cross-language framework for composable, readable, and sharable data mappings built on top of Pydantic.
+chidian is a cross-language framework for composable, readable, and sharable data mappings built on top of **Pydantic _and_ a high-performance Rust engine**.
 
 > [!NOTE]
 > chidian is pre-release -- v0.1 will be on PyPI soon! Feel free to build the code locally (using [maturin](https://github.com/PyO3/maturin)) if you want to try it out now.
@@ -12,10 +12,10 @@ chidian is a cross-language framework for composable, readable, and sharable dat
 ## 30-second tour
 ```python
 from pydantic import BaseModel
-from chidian import DataMapping, Piper, template
+from chidian import Piper, DataMapping
 import chidian.partials as p
 
-# 🎙️ 1. Describe your schemas
+# 1️⃣ Define your source & target schemas
 class Source(BaseModel):
     name: dict
     address: dict
@@ -24,43 +24,40 @@ class Target(BaseModel):
     full_name: str
     address: str
 
-# 🔎 2. Define mapping logic with helpful partial functions
+# 2️⃣ Write pure dict→dict transformation logic with `Piper`
 fmt = p.template("{} {} {}", skip_none=True)
-person_mapping = DataMapping(
-    Source,
-    Target,
-    mapping=lambda src: {
+
+person_piper = Piper(
+    lambda src: {
         "full_name": fmt(
             p.get("name.first")(src),
             p.get("name.given[*]") >> p.join(" ")(src),
             p.get("name.suffix")(src),
         ),
         "address": p.get("address") >> p.flatten_paths(
-            ["street[0]", "street[1]", "city", "postal_code", "country"],
-            delimiter="\n"
+            [
+                "street[0]",
+                "street[1]",
+                "city",
+                "postal_code",
+                "country",
+            ],
+            delimiter="\n",
         )(src),
     }
 )
 
-# 🌱 3. Create runtime and execute transformation
-piper = Piper(person_mapping)
-target_record = piper(source_data)
-
-# For bidirectional mappings, use simple path mappings:
-bidirectional_mapping = DataMapping(
-    Source,
-    Target,
-    mapping={
-        "name.first": "full_name",
-        "address": "address"
-    },
-    bidirectional=True,
+# 3️⃣ Wrap it with `DataMapping` for schema validation
+person_mapping = DataMapping(
+    piper=person_piper,
+    input_schema=Source,
+    output_schema=Target,
 )
 
-# ⏪ Reverse transform (B → A) – zero extra code!
-bidirectional_piper = Piper(bidirectional_mapping)
-target, spillover = bidirectional_piper(source_data)
-source_roundtrip = bidirectional_piper.reverse(target, spillover)
+# 4️⃣ Execute!
+source_obj = Source.model_validate(source_data)
+result = person_mapping.forward(source_obj)
+print(result)
 ```
 
 See the [tests](/chidian-py/tests) for some use-cases.
@@ -69,8 +66,8 @@ See the [tests](/chidian-py/tests) for some use-cases.
 
 | Feature          | In one line                                                                  |
 | ---------------- | ---------------------------------------------------------------------------- |
-| **Piper**        | Runtime engine for executing DataMapping transformations between Pydantic models. |
-| **DataMapping**  | Unidirectional or bidirectional mappings between Pydantic models with callable logic support. |
+| **Piper**        | Pure dict→dict runtime transformations – no schema required.                 |
+| **DataMapping**  | Adds Pydantic validation around a `Piper` for safe, forward-only transforms. |
 | **Partials API** | `>>` operator chains (`split >> last >> upper`) keep lambdas away.           |
 | **DictGroup**    | Lightweight collection class: `select`, `filter`, `to_json`, arrow export.   |
 | **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |
@@ -81,7 +78,7 @@ See the [tests](/chidian-py/tests) for some use-cases.
 chidian treats **Pydantic v2 models as first‑class citizens**:
 
 * Validate inputs & outputs automatically with Pydantic v2
-* `Piper` attaches models to your pipeline for IDE completion & mypy.
+* `DataMapping` wraps your `Piper` for IDE completion & mypy.
 * You can drop down to plain dicts when prototyping with `strict=False`.
 
 
