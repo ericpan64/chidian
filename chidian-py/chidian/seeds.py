@@ -8,6 +8,13 @@ All SEED objects implement a process() method for consistent interface.
 from enum import Enum
 from typing import Any
 
+try:
+    from chidian_rs import SeedDrop, SeedKeep
+
+    _RUST_SEEDS_AVAILABLE = True
+except ImportError:
+    _RUST_SEEDS_AVAILABLE = False
+
 
 class DROP(Enum):
     """
@@ -48,6 +55,14 @@ class DROP(Enum):
 
     def process(self, _data: Any, _context: dict[str, Any] | None = None) -> Any:
         """DROP seeds are processed by Piper, not directly."""
+        # Use Rust implementation if available for better performance
+        if _RUST_SEEDS_AVAILABLE:
+            try:
+                rust_drop = SeedDrop(self.value)
+                return rust_drop.process(_data, _context)
+            except Exception:
+                # Fall back to Python implementation
+                return self
         return self
 
     @property
@@ -66,6 +81,22 @@ class KEEP:
     def __init__(self, value: Any):
         self.value = value
 
+        # Use Rust implementation if available for better performance
+        if _RUST_SEEDS_AVAILABLE:
+            try:
+                self._rust_keep = SeedKeep(value)
+            except Exception:
+                self._rust_keep = None
+        else:
+            self._rust_keep = None
+
     def process(self, _data: Any, _context: dict[str, Any] | None = None) -> Any:
         """KEEP seeds preserve their value during processing."""
+        # Use Rust implementation if available for better performance
+        if self._rust_keep is not None:
+            try:
+                return self._rust_keep.process(_data, _context)
+            except Exception:
+                # Fall back to Python implementation
+                pass
         return self.value

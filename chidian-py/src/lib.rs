@@ -5,6 +5,8 @@ mod py_traversal;
 mod py_mutation;
 
 use chidian_core::parser::parse_path;
+use chidian_core::lexicon::LexiconCore;
+use chidian_core::seeds::{PySeedDrop, PySeedKeep};
 use py_traversal::{apply_functions, traverse_path, traverse_path_strict};
 use py_mutation::mut_traverse_or_create;
 
@@ -89,7 +91,9 @@ fn put(
 fn chidian_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get, m)?)?;
     m.add_function(wrap_pyfunction!(put, m)?)?;
-
+    m.add_class::<LexiconCore>()?;
+    m.add_class::<PySeedDrop>()?;
+    m.add_class::<PySeedKeep>()?;
 
     Ok(())
 }

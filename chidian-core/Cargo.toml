@@ -5,3 +5,7 @@ edition.workspace = true
 
 [dependencies]
 nom.workspace = true
+pyo3.workspace = true
+rustc-hash.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

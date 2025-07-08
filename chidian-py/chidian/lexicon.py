@@ -21,6 +21,12 @@ Examples:
 
 from typing import Optional, Union
 
+try:
+    from chidian_rs import LexiconCore
+except ImportError:
+    # Fallback for development or when Rust extension is not available
+    LexiconCore = None
+
 
 class LexiconBuilder:
     """Builder for creating Lexicon instances."""
@@ -81,6 +87,19 @@ class LexiconBuilder:
         lexicon._default = self._default
         lexicon._reverse = self._reverse_priorities.copy()
         lexicon.metadata = self._metadata
+
+        # Initialize Rust core for high-performance lookups
+        if LexiconCore is not None:
+            try:
+                lexicon._core = LexiconCore(
+                    self._mappings, self._reverse_priorities, self._default
+                )
+            except Exception:
+                # Fall back to Python implementation if Rust core fails
+                lexicon._core = None
+        else:
+            lexicon._core = None
+
         return lexicon
 
 
@@ -134,11 +153,26 @@ class Lexicon(dict):
         self._reverse = reverse_priorities
         self.metadata = metadata or {}
 
+        # Initialize Rust core for high-performance lookups
+        if LexiconCore is not None:
+            try:
+                self._core = LexiconCore(flat_mappings, reverse_priorities, default)
+            except Exception:
+                # Fall back to Python implementation if Rust core fails
+                self._core = None
+        else:
+            self._core = None
+
     def __getitem__(self, key: str) -> str:
         """
         Bidirectional lookup with dict syntax.
         Scans keys first, then values.
         """
+        # Use Rust core if available for better performance
+        if self._core is not None:
+            return self._core.get_bidirectional_strict(key)
+
+        # Fallback to Python implementation
         # Try forward lookup (keys) first
         if super().__contains__(key):
             return super().__getitem__(key)
@@ -158,6 +192,15 @@ class Lexicon(dict):
         Safe bidirectional lookup with default.
         Scans keys first, then values.
         """
+        # Use Rust core if available for better performance
+        if self._core is not None:
+            result = self._core.get_bidirectional(key)
+            if result is not None:
+                return result
+            # If Rust core returned None, respect the provided default
+            return default if default is not None else self._default
+
+        # Fallback to Python implementation
         # Try forward lookup (keys) first
         if super().__contains__(key):
             return super().__getitem__(key)
@@ -171,14 +214,29 @@ class Lexicon(dict):
 
     def __contains__(self, key: object) -> bool:
         """Check if key exists in either forward or reverse mapping."""
+        # Use Rust core if available for better performance
+        if self._core is not None and isinstance(key, str):
+            return self._core.contains_bidirectional(key)
+
+        # Fallback to Python implementation
         return super().__contains__(key) or key in self._reverse
 
     def forward(self, key: str) -> Optional[str]:
         """Transform from source to target format."""
+        # Use Rust core if available for better performance
+        if self._core is not None:
+            return self._core.forward_only(key)
+
+        # Fallback to Python implementation
         return super().get(key, self._default)
 
     def reverse(self, key: str) -> Optional[str]:
         """Transform from target back to source format."""
+        # Use Rust core if available for better performance
+        if self._core is not None:
+            return self._core.reverse_only(key)
+
+        # Fallback to Python implementation
         return self._reverse.get(key, self._default)
 
     def can_reverse(self) -> bool:
