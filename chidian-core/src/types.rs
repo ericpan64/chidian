@@ -8,6 +8,10 @@ pub enum TraversalError {
     TypeMismatch(String),
     InvalidPath(String),
     Custom(String),
+    // New errors for mutation operations
+    CannotCreateContainer(String),
+    InvalidContainerType(String),
+    MutationFailed(String),
 }
 
 impl fmt::Display for TraversalError {
@@ -18,6 +22,9 @@ impl fmt::Display for TraversalError {
             TraversalError::TypeMismatch(msg) => write!(f, "Type mismatch: {}", msg),
             TraversalError::InvalidPath(path) => write!(f, "Invalid path: {}", path),
             TraversalError::Custom(msg) => write!(f, "{}", msg),
+            TraversalError::CannotCreateContainer(msg) => write!(f, "Cannot create container: {}", msg),
+            TraversalError::InvalidContainerType(msg) => write!(f, "Invalid container type: {}", msg),
+            TraversalError::MutationFailed(msg) => write!(f, "Mutation failed: {}", msg),
         }
     }
 }
