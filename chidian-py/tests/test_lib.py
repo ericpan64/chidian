@@ -1,7 +1,6 @@
 """Simplified integration tests for core functionality."""
 
-from chidian import get
-from chidian.lib import put
+from chidian import get, put
 
 
 def test_get_function_basic():

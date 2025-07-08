@@ -3,7 +3,7 @@
 from typing import Any
 
 import pytest
-from chidian.lib import put
+from chidian import put
 
 
 class TestPutBasic:

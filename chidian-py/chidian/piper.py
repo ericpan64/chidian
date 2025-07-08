@@ -1,6 +1,6 @@
 from typing import Any, Callable, Union
 
-from .chidian_rs import get  # type: ignore
+from chidian_rs import get  # type: ignore[attr-defined]
 
 """
 A `Piper` class for independent dict-to-dict transformations.

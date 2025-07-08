@@ -21,21 +21,17 @@ Examples:
 
 from typing import Optional, Union
 
-try:
-    from chidian_rs import LexiconCore
-except ImportError:
-    # Fallback for development or when Rust extension is not available
-    LexiconCore = None
+from chidian_rs import LexiconCore  # type: ignore[attr-defined]
 
 
 class LexiconBuilder:
     """Builder for creating Lexicon instances."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._mappings: dict[str, str] = {}
         self._reverse_priorities: dict[str, str] = {}
         self._default: Optional[str] = None
-        self._metadata: dict = {}
+        self._metadata: dict[str, str] = {}
 
     def add(self, key: str, value: str) -> "LexiconBuilder":
         """Add a single key-value mapping."""
@@ -75,7 +71,7 @@ class LexiconBuilder:
         self._default = default
         return self
 
-    def set_metadata(self, metadata: dict) -> "LexiconBuilder":
+    def set_metadata(self, metadata: dict[str, str]) -> "LexiconBuilder":
         """Set metadata for the lexicon."""
         self._metadata = metadata
         return self
@@ -89,16 +85,9 @@ class LexiconBuilder:
         lexicon.metadata = self._metadata
 
         # Initialize Rust core for high-performance lookups
-        if LexiconCore is not None:
-            try:
-                lexicon._core = LexiconCore(
-                    self._mappings, self._reverse_priorities, self._default
-                )
-            except Exception:
-                # Fall back to Python implementation if Rust core fails
-                lexicon._core = None
-        else:
-            lexicon._core = None
+        lexicon._core = LexiconCore(
+            self._mappings, self._reverse_priorities, self._default
+        )
 
         return lexicon
 
@@ -154,90 +143,46 @@ class Lexicon(dict):
         self.metadata = metadata or {}
 
         # Initialize Rust core for high-performance lookups
-        if LexiconCore is not None:
-            try:
-                self._core = LexiconCore(flat_mappings, reverse_priorities, default)
-            except Exception:
-                # Fall back to Python implementation if Rust core fails
-                self._core = None
-        else:
-            self._core = None
+        self._core = LexiconCore(flat_mappings, reverse_priorities, default)
 
     def __getitem__(self, key: str) -> str:
         """
         Bidirectional lookup with dict syntax.
         Scans keys first, then values.
         """
-        # Use Rust core if available for better performance
-        if self._core is not None:
-            return self._core.get_bidirectional_strict(key)
-
-        # Fallback to Python implementation
-        # Try forward lookup (keys) first
-        if super().__contains__(key):
-            return super().__getitem__(key)
-
-        # Then try reverse lookup (values)
-        if key in self._reverse:
-            return self._reverse[key]
-
-        # Handle missing key
-        if self._default is not None:
-            return self._default
-
-        raise KeyError(f"Key '{key}' not found in forward or reverse mappings")
+        # Use Rust core for better performance
+        return self._core.get_bidirectional_strict(key)
 
     def get(self, key: str, default: Optional[str] = None) -> Optional[str]:  # type: ignore[override]
         """
         Safe bidirectional lookup with default.
         Scans keys first, then values.
         """
-        # Use Rust core if available for better performance
-        if self._core is not None:
-            result = self._core.get_bidirectional(key)
-            if result is not None:
-                return result
-            # If Rust core returned None, respect the provided default
-            return default if default is not None else self._default
+        # Check if key exists first - if it does, get the value
+        if self._core.contains_bidirectional(key):
+            # Key exists, so we can safely get the value
+            # We know this won't be None since the key exists
+            return self._core.get_bidirectional(key)
 
-        # Fallback to Python implementation
-        # Try forward lookup (keys) first
-        if super().__contains__(key):
-            return super().__getitem__(key)
-
-        # Then try reverse lookup (values)
-        if key in self._reverse:
-            return self._reverse[key]
-
-        # Use provided default if given, otherwise instance default
+        # Key doesn't exist, use provided default if given, otherwise instance default
         return default if default is not None else self._default
 
     def __contains__(self, key: object) -> bool:
         """Check if key exists in either forward or reverse mapping."""
-        # Use Rust core if available for better performance
-        if self._core is not None and isinstance(key, str):
+        # Use Rust core for better performance
+        if isinstance(key, str):
             return self._core.contains_bidirectional(key)
-
-        # Fallback to Python implementation
-        return super().__contains__(key) or key in self._reverse
+        return False
 
     def forward(self, key: str) -> Optional[str]:
         """Transform from source to target format."""
-        # Use Rust core if available for better performance
-        if self._core is not None:
-            return self._core.forward_only(key)
-
-        # Fallback to Python implementation
-        return super().get(key, self._default)
+        # Use Rust core for better performance
+        return self._core.forward_only(key)
 
     def reverse(self, key: str) -> Optional[str]:
         """Transform from target back to source format."""
-        # Use Rust core if available for better performance
-        if self._core is not None:
-            return self._core.reverse_only(key)
-
-        # Fallback to Python implementation
-        return self._reverse.get(key, self._default)
+        # Use Rust core for better performance
+        return self._core.reverse_only(key)
 
     def can_reverse(self) -> bool:
         """Lexicon always supports reverse transformation."""

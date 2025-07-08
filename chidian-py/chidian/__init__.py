@@ -1,7 +1,7 @@
-from .chidian_rs import get
+from chidian_rs import get, put  # type: ignore[attr-defined]
+
 from .data_mapping import DataMapping
 from .dict_group import DictGroup
-from .lib import put
 from .partials import ChainableFn, FunctionChain
 from .piper import Piper
 from .seeds import DROP, KEEP

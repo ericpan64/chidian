@@ -28,9 +28,13 @@ class TestSeedProcessing:
         assert DROP.PARENT.level == -2
 
     def test_drop_process_method(self) -> None:
-        """Test DROP process method returns self."""
+        """Test DROP process method returns a SeedDrop instance."""
         result = DROP.THIS_OBJECT.process({"test": "data"})
-        assert result is DROP.THIS_OBJECT
+        # The Rust implementation returns a SeedDrop object
+        from chidian_rs import SeedDrop  # type: ignore[attr-defined]
+
+        assert isinstance(result, SeedDrop)
+        assert result.level == DROP.THIS_OBJECT.value
 
     def test_keep_value_preservation(self) -> None:
         """Test KEEP preserves values correctly."""
