@@ -4,13 +4,11 @@ from typing import Any
 
 try:
     from .chidian_rs import put as rust_put
-    from .chidian_rs import should_use_rust_put
 
     RUST_AVAILABLE = True
 except ImportError:
     RUST_AVAILABLE = False
     rust_put = None
-    should_use_rust_put = None
 
 
 def put(
@@ -41,8 +39,8 @@ def put(
         >>> put({"patient": {"name": "John"}}, "patient.id", "123")
         {'patient': {'name': 'John', 'id': '123'}}
     """
-    # Check if we should use the Rust implementation
-    if RUST_AVAILABLE and should_use_rust_put and should_use_rust_put():
+    # Use Rust implementation if available, otherwise fall back to Python
+    if RUST_AVAILABLE and rust_put:
         return rust_put(target, path, value, strict)
 
     # Fall back to Python implementation
