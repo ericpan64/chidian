@@ -24,14 +24,12 @@ class TestPiperBasic:
         assert result["is_active"] is True
 
     def test_callable_mapping(self) -> None:
-        """Test Piper with callable mapping."""
-
-        def mapping(data: dict) -> dict:
-            return {
-                "patient_id": get(data, "data.patient.id"),
-                "is_active": get(data, "data.patient.active"),
-                "status": "processed",
-            }
+        """Test Piper with callable mapping values."""
+        mapping = {
+            "patient_id": lambda data: get(data, "data.patient.id"),
+            "is_active": lambda data: get(data, "data.patient.active"),
+            "status": lambda data: "processed",
+        }
 
         piper = Piper(mapping)
 
@@ -47,42 +45,41 @@ class TestPiperBasic:
         assert result["status"] == "processed"
 
     def test_callable_mapping_with_partials(self) -> None:
-        """Test Piper with callable mapping using simplified partials API."""
+        """Test Piper with callable mapping values using simplified partials API."""
+        # Use simplified partials API
+        get_first = p.get("firstName")
+        get_last = p.get("lastName")
 
-        def mapper(data: dict) -> dict:
-            # Use simplified partials API
-            get_first = p.get("firstName")
-            get_last = p.get("lastName")
-
-            # Status mapping using simple approach
+        # Status mapping function
+        def status_transform(data: dict) -> str:
             status_map = {"active": "✓ Active", "inactive": "✗ Inactive"}
             status_value = get(data, "status", default="unknown")
-            status_display = status_map.get(status_value, "Unknown")
+            return status_map.get(status_value, "Unknown")
 
-            # City extraction
-            city_extractor = p.get("address") >> p.split("|") >> p.at_index(1)
-
-            # Simple name concatenation
+        # Name concatenation function
+        def full_name_transform(data: dict) -> str:
             first_name = get_first(data) or ""
             last_name = get_last(data) or ""
-            full_name = f"{first_name} {last_name}".strip()
+            return f"{first_name} {last_name}".strip()
 
-            # Join codes
+        # Codes joining function
+        def codes_transform(data: dict) -> str:
             codes = get(data, "codes", default=[])
-            all_codes = ", ".join(str(c) for c in codes) if codes else ""
+            return ", ".join(str(c) for c in codes) if codes else ""
 
-            # Backup name - first available value
-            backup_name = get(data, "nickname") or get(data, "firstName") or "Guest"
+        # Backup name function
+        def backup_name_transform(data: dict) -> str:
+            return get(data, "nickname") or get(data, "firstName") or "Guest"
 
-            return {
-                "name": full_name,
-                "status_display": status_display,
-                "all_codes": all_codes,
-                "city": city_extractor(data),
-                "backup_name": backup_name,
-            }
+        mapping = {
+            "name": full_name_transform,
+            "status_display": status_transform,
+            "all_codes": codes_transform,
+            "city": p.get("address") >> p.split("|") >> p.at_index(1),
+            "backup_name": backup_name_transform,
+        }
 
-        piper = Piper(mapper)
+        piper = Piper(mapping)
 
         input_data = {
             "firstName": "John",
@@ -113,6 +110,9 @@ class TestPiperMapping:
         with pytest.raises(TypeError):
             Piper("not a mapping")  # type: ignore  # Invalid type
 
+        with pytest.raises(TypeError):
+            Piper(lambda x: x)  # type: ignore  # Callable not allowed
+
     def test_piper_with_dict_mapping_containing_callable(self) -> None:
         """Test Piper with dict mapping containing callable values."""
         mapping = {
@@ -137,10 +137,11 @@ class TestPiperMapping:
     def test_piper_error_handling(self) -> None:
         """Test Piper error handling."""
 
-        def failing_mapper(data: dict) -> dict:  # type: ignore
+        def failing_mapper(data: dict) -> str:
             raise ValueError("Test error")
 
-        piper = Piper(failing_mapper)
+        mapping = {"result": failing_mapper}
+        piper = Piper(mapping)
 
         with pytest.raises(ValueError, match="Test error"):
             piper({"test": "data"})
@@ -153,19 +154,18 @@ class TestPiperMapping:
 
     def test_piper_preserves_dict_structure(self) -> None:
         """Test that Piper preserves nested dict structure in results."""
-        # This mapping variable is unused, but kept for documentation
-        _ = {
+        # Note: Piper only supports flat dictionaries, not nested output structures
+        # To achieve nested results, use callables that return nested dicts
+
+        def nested_transform(data: dict) -> dict:
+            return {"deep": get(data, "another.path"), "value": "direct_value"}
+
+        mapping = {
             "flat": "simple.value",
-            "nested": {"deep": "another.path", "value": "direct_value"},
+            "nested": nested_transform,
         }
 
-        def dict_mapper(data: dict) -> dict:
-            return {
-                "flat": get(data, "simple.value"),
-                "nested": {"deep": get(data, "another.path"), "value": "direct_value"},
-            }
-
-        piper = Piper(dict_mapper)
+        piper = Piper(mapping)
 
         input_data = {"simple": {"value": "test"}, "another": {"path": "nested_test"}}
 

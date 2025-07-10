@@ -62,12 +62,10 @@ class TestSeedsWithDataMapping:
 
     def test_simple_data_flow_without_seeds(self, simple_data: dict[str, Any]) -> None:
         """Test baseline data flow without any SEED objects."""
-
-        def mapping(data: dict) -> dict:
-            return {
-                "patient_id": get(data, "data.patient.id"),
-                "is_active": get(data, "data.patient.active"),
-            }
+        mapping = {
+            "patient_id": "data.patient.id",
+            "is_active": "data.patient.active",
+        }
 
         piper = Piper(mapping)
         data_mapping = DataMapping(piper, SourceData, SimpleTarget)
@@ -84,16 +82,13 @@ class TestSeedsWithDataMapping:
         in the current DataMapping/Piper system. KEEP objects need to be processed
         to extract their values before Pydantic validation.
         """
+        # For now, manually process KEEP objects since automatic processing isn't implemented
+        keep_obj = KEEP("processed_string")
 
-        def mapping(_data: dict) -> dict:
-            # For now, manually process KEEP objects since automatic processing isn't implemented
-            keep_obj = KEEP("processed_string")
-            processed_value = keep_obj.process({})  # Manually call process
-
-            return {
-                "processed_value": processed_value,
-                "regular_value": "regular_string",
-            }
+        mapping = {
+            "processed_value": lambda _data: keep_obj.process({}),
+            "regular_value": lambda _data: "regular_string",
+        }
 
         piper = Piper(mapping)
         data_mapping = DataMapping(piper, SourceData, KeepTestTarget)
@@ -109,20 +104,19 @@ class TestSeedsWithDataMapping:
     def test_complex_transformation_with_a_b_data(self, test_A: dict[str, Any]) -> None:
         """Test complex transformation using A.json data structure."""
 
-        def complex_to_flat_mapping(data: dict) -> dict:
-            """Transform complex nested structure to flat format."""
-            # Extract name parts
+        def full_name_transform(data: dict) -> str:
+            """Build full name from name parts."""
             first_name = get(data, "name.first", default="")
             given_names = get(data, "name.given", default=[])
             suffix = get(data, "name.suffix", default="")
 
-            # Build full name
             name_parts = [first_name] + given_names
             if suffix:
                 name_parts.append(suffix)
-            full_name = " ".join(filter(None, name_parts))
+            return " ".join(filter(None, name_parts))
 
-            # Format current address
+        def current_address_transform(data: dict) -> str:
+            """Format current address."""
             current_addr = get(data, "address.current", default={})
             street_lines = get(current_addr, "street", default=[])
             city = get(current_addr, "city", default="")
@@ -130,35 +124,37 @@ class TestSeedsWithDataMapping:
             postal = get(current_addr, "postal_code", default="")
             country = get(current_addr, "country", default="")
 
-            current_address = "\n".join(
+            return "\n".join(
                 filter(None, street_lines + [city, state, postal, country])
             )
 
-            # Get last previous address
+        def last_previous_address_transform(data: dict) -> str:
+            """Get last previous address."""
             previous_addrs = get(data, "address.previous", default=[])
-            last_previous = ""
-            if previous_addrs:
-                last_addr = previous_addrs[-1]
-                prev_street = get(last_addr, "street", default=[])
-                prev_city = get(last_addr, "city", default="")
-                prev_state = get(last_addr, "state", default="")
-                prev_postal = get(last_addr, "postal_code", default="")
-                prev_country = get(last_addr, "country", default="")
-                last_previous = "\n".join(
-                    filter(
-                        None,
-                        prev_street
-                        + [prev_city, prev_state, prev_postal, prev_country],
-                    )
+            if not previous_addrs:
+                return ""
+
+            last_addr = previous_addrs[-1]
+            prev_street = get(last_addr, "street", default=[])
+            prev_city = get(last_addr, "city", default="")
+            prev_state = get(last_addr, "state", default="")
+            prev_postal = get(last_addr, "postal_code", default="")
+            prev_country = get(last_addr, "country", default="")
+
+            return "\n".join(
+                filter(
+                    None,
+                    prev_street + [prev_city, prev_state, prev_postal, prev_country],
                 )
+            )
 
-            return {
-                "full_name": full_name,
-                "current_address": current_address,
-                "last_previous_address": last_previous,
-            }
+        mapping = {
+            "full_name": full_name_transform,
+            "current_address": current_address_transform,
+            "last_previous_address": last_previous_address_transform,
+        }
 
-        piper = Piper(complex_to_flat_mapping)
+        piper = Piper(mapping)
         data_mapping = DataMapping(piper, ComplexPersonData, FlatPersonData)
 
         source = ComplexPersonData.model_validate(test_A)
