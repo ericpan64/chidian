@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+import chidian.partials as p
 import pytest
 from chidian import DataMapping, Piper
 from pydantic import BaseModel
@@ -28,7 +29,12 @@ class TestDataMappingBasic:
     def test_simple_mapping_with_piper(self) -> None:
         """Test DataMapping with Piper for basic field mapping."""
         # Create a Piper for transformation
-        piper = Piper({"subject_ref": "id", "performer": "name"})
+        piper = Piper(
+            {
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            }
+        )
 
         # Create DataMapping with Piper and schemas
         data_mapping = DataMapping(
@@ -69,7 +75,12 @@ class TestDataMappingBasic:
 
     def test_no_reverse_functionality(self) -> None:
         """Test that DataMapping doesn't support reverse operations."""
-        piper = Piper({"subject_ref": "id", "performer": "name"})
+        piper = Piper(
+            {
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            }
+        )
         data_mapping = DataMapping(
             piper=piper,
             input_schema=Patient,
@@ -88,7 +99,12 @@ class TestDataMappingValidation:
 
     def test_input_validation(self) -> None:
         """Test that DataMapping validates input against input schema."""
-        piper = Piper({"subject_ref": "id", "performer": "name"})
+        piper = Piper(
+            {
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            }
+        )
         data_mapping = DataMapping(
             piper=piper,
             input_schema=Patient,
@@ -127,7 +143,7 @@ class TestDataMappingValidation:
 
     def test_schema_validation(self) -> None:
         """Test that DataMapping validates schema types."""
-        piper = Piper({"output": "input"})
+        piper = Piper({"output": p.get("input")})
 
         # Non-Pydantic schema should raise TypeError
         with pytest.raises(TypeError):
@@ -146,7 +162,12 @@ class TestDataMappingValidation:
 
     def test_dict_input_with_strict_mode(self) -> None:
         """Test handling of dict input in strict mode."""
-        piper = Piper({"subject_ref": "id", "performer": "name"})
+        piper = Piper(
+            {
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            }
+        )
         data_mapping = DataMapping(
             piper=piper,
             input_schema=Patient,
@@ -162,7 +183,12 @@ class TestDataMappingValidation:
 
     def test_non_strict_mode(self) -> None:
         """Test behavior in non-strict mode."""
-        piper = Piper({"subject_ref": "id", "performer": "name"})
+        piper = Piper(
+            {
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            }
+        )
         data_mapping = DataMapping(
             piper=piper,
             input_schema=Patient,
@@ -181,7 +207,12 @@ class TestDataMappingWithPiper:
 
     def test_with_dict_piper(self) -> None:
         """Test DataMapping with dict-based Piper."""
-        piper = Piper({"subject_ref": "id", "performer": "name"})
+        piper = Piper(
+            {
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            }
+        )
         data_mapping = DataMapping(
             piper=piper,
             input_schema=Patient,
@@ -219,7 +250,7 @@ class TestDataMappingWithPiper:
 
     def test_piper_independence(self) -> None:
         """Test that Piper works independently of DataMapping."""
-        piper = Piper({"output": "input"})
+        piper = Piper({"output": p.get("input")})
 
         # Piper should work standalone
         result = piper({"input": "test"})

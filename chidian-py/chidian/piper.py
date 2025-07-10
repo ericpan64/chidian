@@ -1,6 +1,4 @@
-from typing import Any
-
-from chidian_py_rs import get  # type: ignore[attr-defined]
+from typing import Any, Callable
 
 """
 A `Piper` class for independent dict-to-dict transformations.
@@ -12,7 +10,7 @@ transformations to apply to the source data.
 
 
 class Piper:
-    def __init__(self, mapping: dict[str, Any]):
+    def __init__(self, mapping: dict[str, Callable[[dict], Any] | Any]):
         """
         Initialize a Piper for dict-to-dict transformations.
 
@@ -20,9 +18,8 @@ class Piper:
             mapping: A dictionary mapping where:
                     - Keys are target field names
                     - Values can be:
-                        - String paths (e.g., "source.path")
-                        - Callable transformations (e.g., lambda, partials)
-                        - Direct values
+                        - Callable transformations (e.g., lambda, partials, p.get)
+                        - Direct values (strings, numbers, etc.)
         """
         if not isinstance(mapping, dict):
             raise TypeError(f"Mapping must be dict, got {type(mapping).__name__}")
@@ -38,14 +35,11 @@ class Piper:
         result = {}
 
         for target_field, mapping_spec in self.mapping.items():
-            if isinstance(mapping_spec, str):
-                # Simple path mapping
-                result[target_field] = get(data, mapping_spec)
-            elif callable(mapping_spec):
+            if callable(mapping_spec):
                 # Callable mapping (lambda, partial, etc.)
                 result[target_field] = mapping_spec(data)
             else:
-                # Direct value
+                # Direct value (including strings)
                 result[target_field] = mapping_spec
 
         return result

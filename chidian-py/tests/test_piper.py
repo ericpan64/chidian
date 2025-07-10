@@ -1,5 +1,7 @@
 """Tests for Piper as independent dict->dict transformer."""
 
+from typing import Any
+
 import chidian.partials as p
 import pytest
 from chidian import Piper, get
@@ -10,7 +12,10 @@ class TestPiperBasic:
 
     def test_simple_dict_mapping(self) -> None:
         """Test basic Piper with dict mapping."""
-        mapping = {"patient_id": "data.patient.id", "is_active": "data.patient.active"}
+        mapping = {
+            "patient_id": p.get("data.patient.id"),
+            "is_active": p.get("data.patient.active"),
+        }
         piper = Piper(mapping)
 
         input_data = {
@@ -116,7 +121,7 @@ class TestPiperMapping:
     def test_piper_with_dict_mapping_containing_callable(self) -> None:
         """Test Piper with dict mapping containing callable values."""
         mapping = {
-            "simple": "path.to.value",
+            "simple": p.get("path.to.value"),
             "transformed": lambda data: data.get("value", "").upper(),
             "partial": p.get("nested.value") >> p.upper,
         }
@@ -140,7 +145,7 @@ class TestPiperMapping:
         def failing_mapper(data: dict) -> str:
             raise ValueError("Test error")
 
-        mapping = {"result": failing_mapper}
+        mapping: dict[str, Any] = {"result": failing_mapper}
         piper = Piper(mapping)
 
         with pytest.raises(ValueError, match="Test error"):
@@ -152,6 +157,26 @@ class TestPiperMapping:
         result = piper({"input": "data"})
         assert result == {}
 
+    def test_piper_with_constant_values(self) -> None:
+        """Test Piper with constant string and other values."""
+        mapping = {
+            "constant_string": "Hello, World!",
+            "constant_number": 42,
+            "constant_bool": True,
+            "constant_none": None,
+            "dynamic_value": p.get("input.value"),
+        }
+        piper = Piper(mapping)
+
+        input_data = {"input": {"value": "dynamic"}, "ignored": "data"}
+        result = piper(input_data)
+
+        assert result["constant_string"] == "Hello, World!"
+        assert result["constant_number"] == 42
+        assert result["constant_bool"] is True
+        assert result["constant_none"] is None
+        assert result["dynamic_value"] == "dynamic"
+
     def test_piper_preserves_dict_structure(self) -> None:
         """Test that Piper preserves nested dict structure in results."""
         # Note: Piper only supports flat dictionaries, not nested output structures
@@ -161,7 +186,7 @@ class TestPiperMapping:
             return {"deep": get(data, "another.path"), "value": "direct_value"}
 
         mapping = {
-            "flat": "simple.value",
+            "flat": p.get("simple.value"),
             "nested": nested_transform,
         }
 
@@ -181,7 +206,7 @@ class TestPiperCalling:
 
     def test_piper_callable_interface(self) -> None:
         """Test that Piper can be called directly."""
-        mapping = {"output": "input"}
+        mapping = {"output": p.get("input")}
         piper = Piper(mapping)
 
         input_data = {"input": "test_value"}
@@ -191,7 +216,7 @@ class TestPiperCalling:
 
     def test_piper_forward_method(self) -> None:
         """Test that Piper.forward() works the same as calling."""
-        mapping = {"output": "input"}
+        mapping = {"output": p.get("input")}
         piper = Piper(mapping)
 
         input_data = {"input": "test_value"}
@@ -203,7 +228,7 @@ class TestPiperCalling:
 
     def test_piper_no_reverse(self) -> None:
         """Test that Piper doesn't support reverse operations."""
-        mapping = {"output": "input"}
+        mapping = {"output": p.get("input")}
         piper = Piper(mapping)
 
         # Should not have reverse method

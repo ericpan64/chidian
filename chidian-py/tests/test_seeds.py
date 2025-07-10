@@ -62,9 +62,11 @@ class TestSeedsWithDataMapping:
 
     def test_simple_data_flow_without_seeds(self, simple_data: dict[str, Any]) -> None:
         """Test baseline data flow without any SEED objects."""
+        from chidian.partials import get as p_get
+
         mapping = {
-            "patient_id": "data.patient.id",
-            "is_active": "data.patient.active",
+            "patient_id": p_get("data.patient.id"),
+            "is_active": p_get("data.patient.active"),
         }
 
         piper = Piper(mapping)
@@ -148,7 +150,7 @@ class TestSeedsWithDataMapping:
                 )
             )
 
-        mapping = {
+        mapping: dict[str, Any] = {
             "full_name": full_name_transform,
             "current_address": current_address_transform,
             "last_previous_address": last_previous_address_transform,
