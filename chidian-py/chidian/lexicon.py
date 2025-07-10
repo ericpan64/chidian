@@ -21,7 +21,7 @@ Examples:
 
 from typing import Optional, Union
 
-from chidian_rs import LexiconCore  # type: ignore[attr-defined]
+from chidian_py_rs import LexiconCore  # type: ignore[attr-defined]
 
 
 class LexiconBuilder:

@@ -8,7 +8,7 @@ All SEED objects implement a process() method for consistent interface.
 from enum import Enum
 from typing import Any
 
-from chidian_rs import SeedDrop, SeedKeep  # type: ignore[attr-defined]
+from chidian_py_rs import SeedDrop, SeedKeep  # type: ignore[attr-defined]
 
 
 class DROP(Enum):

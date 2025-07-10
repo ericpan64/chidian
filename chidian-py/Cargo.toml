@@ -5,7 +5,7 @@ edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "chidian_rs"
+name = "chidian_py_rs"
 crate-type = ["cdylib"]
 
 [dependencies]

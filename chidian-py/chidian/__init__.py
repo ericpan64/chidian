@@ -1,4 +1,4 @@
-from chidian_rs import get, put  # type: ignore[attr-defined]
+from chidian_py_rs import get, put  # type: ignore[attr-defined]
 
 from .data_mapping import DataMapping
 from .dict_group import DictGroup

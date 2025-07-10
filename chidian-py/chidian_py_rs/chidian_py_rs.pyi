@@ -1,4 +1,4 @@
-# Type stubs for the Rust extension module chidian_rs.chidian_rs
+# Type stubs for the Rust extension module chidian_py_rs.chidian_py_rs
 from typing import Any, Optional
 
 def get(

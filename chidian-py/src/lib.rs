@@ -88,7 +88,7 @@ fn put(
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn chidian_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn chidian_py_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get, m)?)?;
     m.add_function(wrap_pyfunction!(put, m)?)?;
     m.add_class::<LexiconCore>()?;

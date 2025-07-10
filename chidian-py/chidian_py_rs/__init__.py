@@ -1,5 +1,5 @@
-# This file makes chidian_rs a Python package
+# This file makes chidian_py_rs a Python package
 # The actual module is provided by the Rust extension
-from .chidian_rs import LexiconCore, SeedDrop, SeedKeep, get, put
+from .chidian_py_rs import LexiconCore, SeedDrop, SeedKeep, get, put
 
 __all__ = ["get", "put", "LexiconCore", "SeedDrop", "SeedKeep"]

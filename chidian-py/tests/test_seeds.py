@@ -31,7 +31,7 @@ class TestSeedProcessing:
         """Test DROP process method returns a SeedDrop instance."""
         result = DROP.THIS_OBJECT.process({"test": "data"})
         # The Rust implementation returns a SeedDrop object
-        from chidian_rs import SeedDrop  # type: ignore[attr-defined]
+        from chidian_py_rs import SeedDrop  # type: ignore[attr-defined]
 
         assert isinstance(result, SeedDrop)
         assert result.level == DROP.THIS_OBJECT.value
