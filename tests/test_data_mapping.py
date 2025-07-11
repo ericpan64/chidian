@@ -2,10 +2,11 @@
 
 from typing import Optional
 
-import chidian.partials as p
 import pytest
-from chidian import DataMapping, Piper
 from pydantic import BaseModel
+
+import chidian.partials as p
+from chidian import DataMapping, Piper
 
 
 # Test models

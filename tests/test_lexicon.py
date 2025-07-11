@@ -1,6 +1,7 @@
 """Tests for the Lexicon class with tuple support."""
 
 import pytest
+
 from chidian.lexicon import Lexicon
 
 

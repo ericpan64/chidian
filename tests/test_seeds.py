@@ -4,7 +4,6 @@ from typing import Any
 
 from chidian import DataMapping, Piper, get
 from chidian.seeds import DROP, KEEP
-
 from tests.structstest import (
     ComplexPersonData,
     FlatPersonData,
@@ -28,12 +27,10 @@ class TestSeedProcessing:
         assert DROP.PARENT.level == -2
 
     def test_drop_process_method(self) -> None:
-        """Test DROP process method returns a SeedDrop instance."""
+        """Test DROP process method returns itself."""
         result = DROP.THIS_OBJECT.process({"test": "data"})
-        # The Rust implementation returns a SeedDrop object
-        from chidian_py_rs import SeedDrop  # type: ignore[attr-defined]
-
-        assert isinstance(result, SeedDrop)
+        # The Python implementation returns the DROP enum itself
+        assert result == DROP.THIS_OBJECT
         assert result.level == DROP.THIS_OBJECT.value
 
     def test_keep_value_preservation(self) -> None:

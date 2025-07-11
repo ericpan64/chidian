@@ -8,8 +8,6 @@ All SEED objects implement a process() method for consistent interface.
 from enum import Enum
 from typing import Any
 
-from chidian_py_rs import SeedDrop, SeedKeep  # type: ignore[attr-defined]
-
 
 class DROP(Enum):
     """
@@ -48,10 +46,9 @@ class DROP(Enum):
     GRANDPARENT = -3
     GREATGRANDPARENT = -4
 
-    def process(self, _data: Any, _context: dict[str, Any] | None = None) -> Any:
+    def process(self, _data: Any, _context: dict[str, Any] | None = None) -> "DROP":
         """DROP seeds are processed by Piper, not directly."""
-        rust_drop = SeedDrop(self.value)
-        return rust_drop.process(_data, _context)
+        return self
 
     @property
     def level(self) -> int:
@@ -68,8 +65,7 @@ class KEEP:
 
     def __init__(self, value: Any):
         self.value = value
-        self._rust_keep = SeedKeep(value)
 
     def process(self, _data: Any, _context: dict[str, Any] | None = None) -> Any:
         """KEEP seeds preserve their value during processing."""
-        return self._rust_keep.process(_data, _context)
+        return self.value

@@ -1,5 +1,4 @@
-from chidian_py_rs import get, put  # type: ignore[attr-defined]
-
+from .core import get, put
 from .data_mapping import DataMapping
 from .dict_group import DictGroup
 from .partials import ChainableFn, FunctionChain

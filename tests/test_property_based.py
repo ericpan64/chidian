@@ -1,9 +1,10 @@
 """Property-based tests for core chidian functionality."""
 
-import chidian.partials as p
-from chidian import get
 from hypothesis import given
 from hypothesis import strategies as st
+
+import chidian.partials as p
+from chidian import get
 
 
 # Custom strategies for valid paths

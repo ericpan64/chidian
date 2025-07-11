@@ -21,8 +21,6 @@ Examples:
 
 from typing import Optional, Union
 
-from chidian_py_rs import LexiconCore  # type: ignore[attr-defined]
-
 
 class LexiconBuilder:
     """Builder for creating Lexicon instances."""
@@ -84,11 +82,6 @@ class LexiconBuilder:
         lexicon._reverse = self._reverse_priorities.copy()
         lexicon.metadata = self._metadata
 
-        # Initialize Rust core for high-performance lookups
-        lexicon._core = LexiconCore(
-            self._mappings, self._reverse_priorities, self._default
-        )
-
         return lexicon
 
 
@@ -142,47 +135,67 @@ class Lexicon(dict):
         self._reverse = reverse_priorities
         self.metadata = metadata or {}
 
-        # Initialize Rust core for high-performance lookups
-        self._core = LexiconCore(flat_mappings, reverse_priorities, default)
-
     def __getitem__(self, key: str) -> str:
         """
         Bidirectional lookup with dict syntax.
         Scans keys first, then values.
         """
-        # Use Rust core for better performance
-        return self._core.get_bidirectional_strict(key)
+        # Try forward lookup first (check in dict keys)
+        if super().__contains__(key):
+            return super().__getitem__(key)
+
+        # Try reverse lookup
+        # First check if it's in our reverse priority mapping
+        if key in self._reverse:
+            return self._reverse[key]
+
+        # If not in priority mapping, search all values
+        for k, v in self.items():
+            if v == key:
+                return k
+
+        # Check if we have a default value
+        if self._default is not None:
+            return self._default
+
+        # Raise KeyError if not found and no default
+        raise KeyError(f"Key '{key}' not found")
 
     def get(self, key: str, default: Optional[str] = None) -> Optional[str]:  # type: ignore[override]
         """
         Safe bidirectional lookup with default.
         Scans keys first, then values.
         """
-        # Check if key exists first - if it does, get the value
-        if self._core.contains_bidirectional(key):
-            # Key exists, so we can safely get the value
-            # We know this won't be None since the key exists
-            return self._core.get_bidirectional(key)
+        # Try forward lookup first (check in dict keys)
+        if super().__contains__(key):
+            return super().__getitem__(key)
+
+        # Try reverse lookup
+        # First check if it's in our reverse priority mapping
+        if key in self._reverse:
+            return self._reverse[key]
+
+        # If not in priority mapping, search all values
+        for k, v in self.items():
+            if v == key:
+                return k
 
         # Key doesn't exist, use provided default if given, otherwise instance default
         return default if default is not None else self._default
 
     def __contains__(self, key: object) -> bool:
         """Check if key exists in either forward or reverse mapping."""
-        # Use Rust core for better performance
         if isinstance(key, str):
-            return self._core.contains_bidirectional(key)
+            return super().__contains__(key) or key in self._reverse
         return False
 
     def forward(self, key: str) -> Optional[str]:
         """Transform from source to target format."""
-        # Use Rust core for better performance
-        return self._core.forward_only(key)
+        return super().get(key)
 
     def reverse(self, key: str) -> Optional[str]:
         """Transform from target back to source format."""
-        # Use Rust core for better performance
-        return self._core.reverse_only(key)
+        return self._reverse.get(key)
 
     def can_reverse(self) -> bool:
         """Lexicon always supports reverse transformation."""

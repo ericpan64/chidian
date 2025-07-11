@@ -1,5 +1,6 @@
-import chidian.partials as p
 import pytest
+
+import chidian.partials as p
 
 
 def test_basic_arithmetic():

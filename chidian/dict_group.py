@@ -1,7 +1,7 @@
 import json
 from typing import Any, Callable, Iterator, Optional, Union
 
-from chidian_py_rs import get  # type: ignore[attr-defined]
+from .core import get
 
 """
 A `DictGroup` is aconvenient wrapper around dict[str, dict] for managing collections of dictionary data.

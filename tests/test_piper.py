@@ -2,8 +2,9 @@
 
 from typing import Any
 
-import chidian.partials as p
 import pytest
+
+import chidian.partials as p
 from chidian import Piper, get
 
 

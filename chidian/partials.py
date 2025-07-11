@@ -8,7 +8,7 @@ import operator
 from functools import partial, reduce
 from typing import Any, Callable, TypeVar
 
-from chidian_py_rs import get as _get  # type: ignore[attr-defined]
+from .core import get as _get
 
 T = TypeVar("T")
 
