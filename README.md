@@ -60,7 +60,7 @@ result = person_mapping.forward(source_obj)
 print(result)
 ```
 
-See the [tests](/chidian-py/tests) for some use-cases.
+See the [tests](/chidian/tests) for some use-cases.
 
 ## Feature highlights
 
