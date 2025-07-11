@@ -17,6 +17,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
+    "parsimonious>=0.10.0",
     "pydantic>=2.10.6,<3.0.0", # Only Pydantic v2 is supported
 ]
 
