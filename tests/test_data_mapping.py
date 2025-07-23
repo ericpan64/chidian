@@ -1,4 +1,4 @@
-"""Test the new DataMapping class as forward-only validator."""
+"""Test the new DataMapping class and Mapper with validation modes."""
 
 from typing import Optional
 
@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 import chidian.partials as p
-from chidian import DataMapping, Mapper
+from chidian import DataMapping, Mapper, MapperResult, ValidationMode
 
 
 # Test models
@@ -29,241 +29,237 @@ class TestDataMappingBasic:
 
     def test_simple_mapping_with_mapper(self) -> None:
         """Test DataMapping with Mapper for basic field mapping."""
-        # Create a Mapper for transformation
-        mapper = Mapper(
-            {
+        # Create a DataMapping for transformation
+        data_mapping = DataMapping(
+            transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
-            }
-        )
-
-        # Create DataMapping with Mapper and schemas
-        data_mapping = DataMapping(
-            mapper=mapper,
+            },
             input_schema=Patient,
             output_schema=Observation,
         )
 
+        # Create Mapper with DataMapping
+        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
+
         patient = Patient(id="123", name="John", active=True)
-        obs = data_mapping.forward(patient)
+        obs = mapper(patient)
 
         assert isinstance(obs, Observation)
         assert obs.subject_ref == "123"
         assert obs.performer == "John"
 
     def test_complex_mapping_with_callable_mapper(self) -> None:
-        """Test DataMapping with callable transformations in Mapper."""
-        mapping = {
-            "subject_ref": lambda data: f"Patient/{data['id']}",
-            "performer": lambda data: data["name"].upper(),
-            "status": lambda data: "active" if data["active"] else "inactive",
-        }
-
-        mapper = Mapper(mapping)
-
+        """Test DataMapping with callable transformations."""
         data_mapping = DataMapping(
-            mapper=mapper,
+            transformations={
+                "subject_ref": lambda data: f"Patient/{data['id']}",
+                "performer": lambda data: data["name"].upper(),
+                "status": lambda data: "active" if data["active"] else "inactive",
+            },
             input_schema=Patient,
             output_schema=Observation,
         )
 
-        patient = Patient(id="123", name="john", active=True)
-        obs = data_mapping.forward(patient)
+        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
 
+        patient = Patient(id="123", name="john", active=True)
+        obs = mapper(patient)
+
+        assert isinstance(obs, Observation)
         assert obs.subject_ref == "Patient/123"
         assert obs.performer == "JOHN"
         assert obs.status == "active"
 
-    def test_no_reverse_functionality(self) -> None:
-        """Test that DataMapping doesn't support reverse operations."""
-        mapper = Mapper(
-            {
+    def test_validation_modes(self) -> None:
+        """Test different validation modes."""
+        data_mapping = DataMapping(
+            transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
-            }
-        )
-        data_mapping = DataMapping(
-            mapper=mapper,
+            },
             input_schema=Patient,
             output_schema=Observation,
         )
 
-        # Should not have reverse method
-        assert not hasattr(data_mapping, "reverse")
+        # Test strict mode
+        strict_mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
+        patient = Patient(id="123", name="John", active=True)
+        obs = strict_mapper(patient)
+        assert isinstance(obs, Observation)
+        assert obs.subject_ref == "123"
 
-        # Should not have can_reverse method
-        assert not hasattr(data_mapping, "can_reverse")
+        # Test flexible mode
+        flexible_mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
+        result = flexible_mapper(patient)
+        assert isinstance(result, MapperResult)
+        assert not result.has_issues
+        assert result.data.subject_ref == "123"
 
 
 class TestDataMappingValidation:
     """Test DataMapping validation features."""
 
     def test_input_validation(self) -> None:
-        """Test that DataMapping validates input against input schema."""
-        mapper = Mapper(
-            {
+        """Test that Mapper validates input against input schema."""
+        data_mapping = DataMapping(
+            transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
-            }
-        )
-        data_mapping = DataMapping(
-            mapper=mapper,
+            },
             input_schema=Patient,
             output_schema=Observation,
         )
+
+        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
 
         # Valid input works
         patient = Patient(id="123", name="John", active=True)
-        obs = data_mapping.forward(patient)
+        obs = mapper(patient)
+        assert isinstance(obs, Observation)
         assert obs.subject_ref == "123"
 
-        # Invalid input should raise ValidationError
+        # Invalid input should raise ValidationError in strict mode
         with pytest.raises(Exception):  # Pydantic ValidationError
-            data_mapping.forward({"invalid": "data"})
+            mapper({"invalid": "data"})
 
     def test_output_validation(self) -> None:
-        """Test that DataMapping validates output against output schema."""
-
-        # Mapper that produces invalid output
-        mapping = {
-            "invalid_field": lambda data: "value",  # Missing required fields
-        }
-
-        mapper = Mapper(mapping)
+        """Test that Mapper validates output against output schema."""
+        # DataMapping that produces invalid output
         data_mapping = DataMapping(
-            mapper=mapper,
+            transformations={
+                "invalid_field": lambda data: "value",  # Missing required fields
+            },
             input_schema=Patient,
             output_schema=Observation,
         )
 
+        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
         patient = Patient(id="123", name="John", active=True)
 
-        # Should raise ValidationError due to invalid output
+        # Should raise ValidationError due to invalid output in strict mode
         with pytest.raises(Exception):  # Pydantic ValidationError
-            data_mapping.forward(patient)
+            mapper(patient)
 
-    def test_schema_validation(self) -> None:
-        """Test that DataMapping validates schema types."""
-        mapper = Mapper({"output": p.get("input")})
+    def test_flexible_mode_validation(self) -> None:
+        """Test flexible mode collects validation errors."""
+        # DataMapping that produces invalid output
+        data_mapping = DataMapping(
+            transformations={
+                "invalid_field": lambda data: "value",  # Missing required fields
+            },
+            input_schema=Patient,
+            output_schema=Observation,
+        )
 
-        # Non-Pydantic schema should raise TypeError
-        with pytest.raises(TypeError):
-            DataMapping(
-                mapper=mapper,
-                input_schema=dict,  # type: ignore  # Not a Pydantic model
-                output_schema=Observation,
-            )
+        mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
+        patient = Patient(id="123", name="John", active=True)
 
-        with pytest.raises(TypeError):
-            DataMapping(
-                mapper=mapper,
-                input_schema=Patient,
-                output_schema=dict,  # type: ignore  # Not a Pydantic model
-            )
+        # Should return MapperResult with issues
+        result = mapper(patient)
+        assert isinstance(result, MapperResult)
+        assert result.has_issues
+        assert len(result.issues) > 0
+        assert result.issues[0].stage == "output"
 
     def test_dict_input_with_strict_mode(self) -> None:
         """Test handling of dict input in strict mode."""
-        mapper = Mapper(
-            {
+        data_mapping = DataMapping(
+            transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
-            }
-        )
-        data_mapping = DataMapping(
-            mapper=mapper,
+            },
             input_schema=Patient,
             output_schema=Observation,
-            strict=True,
         )
+
+        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
 
         # Dict input should be validated and converted
         dict_input = {"id": "123", "name": "John", "active": True}
-        obs = data_mapping.forward(dict_input)
-        assert obs.subject_ref == "123"
-        assert obs.performer == "John"
-
-    def test_non_strict_mode(self) -> None:
-        """Test behavior in non-strict mode."""
-        mapper = Mapper(
-            {
-                "subject_ref": p.get("id"),
-                "performer": p.get("name"),
-            }
-        )
-        data_mapping = DataMapping(
-            mapper=mapper,
-            input_schema=Patient,
-            output_schema=Observation,
-            strict=False,
-        )
-
-        # Should still work with valid input
-        patient = Patient(id="123", name="John", active=True)
-        obs = data_mapping.forward(patient)
-        assert obs.subject_ref == "123"
-
-
-class TestDataMappingWithMapper:
-    """Test DataMapping integration with different Mapper types."""
-
-    def test_with_dict_mapper(self) -> None:
-        """Test DataMapping with dict-based Mapper."""
-        mapper = Mapper(
-            {
-                "subject_ref": p.get("id"),
-                "performer": p.get("name"),
-            }
-        )
-        data_mapping = DataMapping(
-            mapper=mapper,
-            input_schema=Patient,
-            output_schema=Observation,
-        )
-
-        patient = Patient(id="123", name="John", active=True)
-        obs = data_mapping.forward(patient)
-
+        obs = mapper(dict_input)
         assert isinstance(obs, Observation)
         assert obs.subject_ref == "123"
         assert obs.performer == "John"
 
-    def test_with_callable_mapper(self) -> None:
-        """Test DataMapping with callable transformations in Mapper."""
-        mapping = {
-            "subject_ref": lambda data: data["id"],
-            "performer": lambda data: data["name"],
-            "status": lambda data: "processed",
-        }
+    def test_auto_mode(self) -> None:
+        """Test auto mode behavior."""
+        # With schemas - should use strict mode
+        data_mapping_with_schemas = DataMapping(
+            transformations={
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            },
+            input_schema=Patient,
+            output_schema=Observation,
+        )
 
-        mapper = Mapper(mapping)
+        mapper = Mapper(data_mapping_with_schemas)  # AUTO mode by default
+        assert mapper.mode == ValidationMode.STRICT
+
+        # Without schemas - should use flexible mode
+        data_mapping_no_schemas = DataMapping(
+            transformations={
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            }
+        )
+
+        mapper2 = Mapper(data_mapping_no_schemas)  # AUTO mode by default
+        assert mapper2.mode == ValidationMode.FLEXIBLE
+
+
+class TestDataMappingWithoutSchemas:
+    """Test DataMapping without schemas (pure transformation)."""
+
+    def test_pure_transformation(self) -> None:
+        """Test DataMapping as pure transformation without schemas."""
         data_mapping = DataMapping(
-            mapper=mapper,
-            input_schema=Patient,
+            transformations={
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            }
+        )
+
+        # Direct transformation
+        result = data_mapping.transform({"id": "123", "name": "John"})
+        assert result["subject_ref"] == "123"
+        assert result["performer"] == "John"
+
+    def test_with_flexible_mapper(self) -> None:
+        """Test DataMapping without schemas using flexible Mapper."""
+        data_mapping = DataMapping(
+            transformations={
+                "subject_ref": lambda data: f"Patient/{data.get('id', 'unknown')}",
+                "performer": lambda data: data.get("name", "Unknown"),
+                "status": lambda data: "processed",
+            }
+        )
+
+        mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
+
+        # Should work with incomplete data
+        result = mapper({"id": "123"})
+        assert isinstance(result, MapperResult)
+        assert result.data["subject_ref"] == "Patient/123"
+        assert result.data["performer"] == "Unknown"
+        assert result.data["status"] == "processed"
+
+    def test_mapper_result_interface(self) -> None:
+        """Test MapperResult interface."""
+        data_mapping = DataMapping(
+            transformations={
+                "missing_field": p.get("nonexistent"),
+            },
             output_schema=Observation,
         )
 
-        patient = Patient(id="123", name="John", active=True)
-        obs = data_mapping.forward(patient)
+        mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
+        result = mapper({"id": "123"})
 
-        assert obs.subject_ref == "123"
-        assert obs.performer == "John"
-        assert obs.status == "processed"
+        assert isinstance(result, MapperResult)
+        assert result.has_issues
 
-    def test_mapper_independence(self) -> None:
-        """Test that Mapper works independently of DataMapping."""
-        mapper = Mapper({"output": p.get("input")})
-
-        # Mapper should work standalone
-        result = mapper({"input": "test"})
-        assert result["output"] == "test"
-
-        # Same Mapper can be used with DataMapping
-        _ = DataMapping(
-            mapper=mapper,
-            input_schema=Patient,
-            output_schema=Observation,
-        )
-
-        # Both should work independently
-        direct_result = mapper({"input": "direct"})
-        assert direct_result["output"] == "direct"
+        # Test raise_if_issues
+        with pytest.raises(Exception):
+            result.raise_if_issues()

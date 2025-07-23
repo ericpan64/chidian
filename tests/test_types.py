@@ -67,9 +67,11 @@ class TestSeedsWithDataMapping:
             "is_active": p_get("data.patient.active"),
         }
 
-        mapper = Mapper(mapping)
-        data_mapping = DataMapping(mapper, SourceData, SimpleTarget)
-        result = data_mapping.forward(SourceData.model_validate(simple_data))
+        data_mapping = DataMapping(
+            transformations=mapping, input_schema=SourceData, output_schema=SimpleTarget
+        )
+        mapper = Mapper(data_mapping)
+        result = mapper(SourceData.model_validate(simple_data))
 
         assert isinstance(result, SimpleTarget)
         assert result.patient_id == "abc123"
@@ -90,11 +92,15 @@ class TestSeedsWithDataMapping:
             "regular_value": lambda _data: "regular_string",
         }
 
-        mapper = Mapper(mapping)
-        data_mapping = DataMapping(mapper, SourceData, KeepTestTarget)
+        data_mapping = DataMapping(
+            transformations=mapping,
+            input_schema=SourceData,
+            output_schema=KeepTestTarget,
+        )
+        mapper = Mapper(data_mapping)
 
         source = SourceData(data={})
-        result = data_mapping.forward(source)
+        result = mapper(source)
 
         # Manually processed KEEP objects work
         assert isinstance(result, KeepTestTarget)
@@ -154,11 +160,15 @@ class TestSeedsWithDataMapping:
             "last_previous_address": last_previous_address_transform,
         }
 
-        mapper = Mapper(mapping)
-        data_mapping = DataMapping(mapper, ComplexPersonData, FlatPersonData)
+        data_mapping = DataMapping(
+            transformations=mapping,
+            input_schema=ComplexPersonData,
+            output_schema=FlatPersonData,
+        )
+        mapper = Mapper(data_mapping)
 
         source = ComplexPersonData.model_validate(test_A)
-        result = data_mapping.forward(source)
+        result = mapper(source)
 
         assert isinstance(result, FlatPersonData)
         assert "Bob" in result.full_name
