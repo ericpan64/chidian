@@ -1,8 +1,10 @@
 """
-SEED classes provide data transformation directives for use with Piper.
+Special types and sentinels for data transformation.
 
 Contains DROP (enum for indicating data removal) and KEEP (class for preserving values).
-All SEED objects implement a process() method for consistent interface.
+These types implement a process() method for consistent interface.
+
+This module may be expanded with additional type aliases and utilities in the future.
 """
 
 from enum import Enum
@@ -14,7 +16,7 @@ class DROP(Enum):
     A DROP placeholder object indicates the object relative to the current value should be dropped.
     An "object" in this context is a dict or a list.
 
-    This enum implements the SEED protocol without inheritance to avoid metaclass conflicts.
+    This enum implements the transformation protocol without inheritance to avoid metaclass conflicts.
 
     Examples:
     ```
@@ -47,7 +49,7 @@ class DROP(Enum):
     GREATGRANDPARENT = -4
 
     def process(self, _data: Any, _context: dict[str, Any] | None = None) -> "DROP":
-        """DROP seeds are processed by Piper, not directly."""
+        """DROP sentinels are processed by Mapper, not directly."""
         return self
 
     @property
@@ -67,5 +69,5 @@ class KEEP:
         self.value = value
 
     def process(self, _data: Any, _context: dict[str, Any] | None = None) -> Any:
-        """KEEP seeds preserve their value during processing."""
+        """KEEP sentinels preserve their value during processing."""
         return self.value

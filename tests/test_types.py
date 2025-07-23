@@ -1,9 +1,9 @@
-"""Comprehensive tests for SEED operations with Mapper and DataMapping."""
+"""Comprehensive tests for special types (DROP, KEEP) with Mapper and DataMapping."""
 
 from typing import Any
 
 from chidian import DataMapping, Mapper, get
-from chidian.seeds import DROP, KEEP
+from chidian.types import DROP, KEEP
 from tests.structstest import (
     ComplexPersonData,
     FlatPersonData,
@@ -14,7 +14,7 @@ from tests.structstest import (
 
 
 class TestSeedProcessing:
-    """Test SEED value processing independently."""
+    """Test special type value processing independently."""
 
     def test_drop_enum_values(self) -> None:
         """Test DROP enum values and level property."""
@@ -55,10 +55,12 @@ class TestSeedProcessing:
 
 
 class TestSeedsWithDataMapping:
-    """Test SEED integration with DataMapping and Mapper."""
+    """Test special type integration with DataMapping and Mapper."""
 
-    def test_simple_data_flow_without_seeds(self, simple_data: dict[str, Any]) -> None:
-        """Test baseline data flow without any SEED objects."""
+    def test_simple_data_flow_without_special_types(
+        self, simple_data: dict[str, Any]
+    ) -> None:
+        """Test baseline data flow without any special type objects."""
         from chidian.partials import get as p_get
 
         mapping = {
@@ -77,7 +79,7 @@ class TestSeedsWithDataMapping:
     def test_keep_in_transformation(self) -> None:
         """Test KEEP objects in data transformations.
 
-        Note: This test demonstrates that SEED processing is not yet implemented
+        Note: This test demonstrates that special type processing is not yet implemented
         in the current DataMapping/Mapper system. KEEP objects need to be processed
         to extract their values before Pydantic validation.
         """
