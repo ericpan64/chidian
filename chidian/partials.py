@@ -20,12 +20,12 @@ class FunctionChain:
         self.operations = list(operations)
 
     def __rshift__(
-        self, other: Callable | "FunctionChain" | "ChainableFn"
+        self, other: Callable | "FunctionChain" | "ChainableFunction"
     ) -> "FunctionChain":
         """Chain operations with >> operator."""
         if isinstance(other, FunctionChain):
             return FunctionChain(*self.operations, *other.operations)
-        elif isinstance(other, ChainableFn):
+        elif isinstance(other, ChainableFunction):
             return FunctionChain(*self.operations, other.func)
         else:
             return FunctionChain(*self.operations, other)
@@ -45,7 +45,7 @@ class FunctionChain:
         return len(self.operations)
 
 
-class ChainableFn:
+class ChainableFunction:
     """Wrapper to make any function/partial chainable with >>."""
 
     def __init__(self, func: Callable):
@@ -55,18 +55,18 @@ class ChainableFn:
         self.__doc__ = getattr(func, "__doc__", None)
 
     def __rshift__(
-        self, other: Callable | FunctionChain | "ChainableFn"
+        self, other: Callable | FunctionChain | "ChainableFunction"
     ) -> FunctionChain:
         """Start or extend a chain with >> operator."""
         if isinstance(other, FunctionChain):
             return FunctionChain(self.func, *other.operations)
-        elif isinstance(other, ChainableFn):
+        elif isinstance(other, ChainableFunction):
             return FunctionChain(self.func, other.func)
         else:
             return FunctionChain(self.func, other)
 
     def __rrshift__(self, other: Callable | FunctionChain) -> FunctionChain:
-        """Allow chaining when ChainableFn is on the right side."""
+        """Allow chaining when ChainableFunction is on the right side."""
         if isinstance(other, FunctionChain):
             return FunctionChain(*other.operations, self.func)
         else:
@@ -77,7 +77,7 @@ class ChainableFn:
         return self.func(*args, **kwargs)
 
     def __repr__(self) -> str:
-        return f"ChainableFn({self.__name__})"
+        return f"ChainableFunction({self.__name__})"
 
 
 def get(
@@ -128,20 +128,20 @@ def isinstance_of(type_or_types: type) -> Callable[[Any], bool]:
     return partial(lambda x, types: isinstance(x, types), types=type_or_types)
 
 
-# String manipulation functions as ChainableFn
-upper = ChainableFn(str.upper)
-lower = ChainableFn(str.lower)
-strip = ChainableFn(str.strip)
+# String manipulation functions as ChainableFunction
+upper = ChainableFunction(str.upper)
+lower = ChainableFunction(str.lower)
+strip = ChainableFunction(str.strip)
 
 
-def split(sep: str | None = None) -> ChainableFn:
+def split(sep: str | None = None) -> ChainableFunction:
     """Create a chainable split function."""
-    return ChainableFn(partial(str.split, sep=sep))
+    return ChainableFunction(partial(str.split, sep=sep))
 
 
-def replace(old: str, new: str) -> ChainableFn:
+def replace(old: str, new: str) -> ChainableFunction:
     """Create a chainable replace function."""
-    return ChainableFn(
+    return ChainableFunction(
         partial(
             lambda s, old_val, new_val: s.replace(old_val, new_val),
             old_val=old,
@@ -150,42 +150,46 @@ def replace(old: str, new: str) -> ChainableFn:
     )
 
 
-def join(sep: str) -> ChainableFn:
+def join(sep: str) -> ChainableFunction:
     """Create a chainable join function."""
-    return ChainableFn(partial(lambda separator, items: separator.join(items), sep))
+    return ChainableFunction(
+        partial(lambda separator, items: separator.join(items), sep)
+    )
 
 
-# Array/List operations as ChainableFn
-first = ChainableFn(lambda x: x[0] if x else None)
-last = ChainableFn(lambda x: x[-1] if x else None)
-length = ChainableFn(len)
+# Array/List operations as ChainableFunction
+first = ChainableFunction(lambda x: x[0] if x else None)
+last = ChainableFunction(lambda x: x[-1] if x else None)
+length = ChainableFunction(len)
 
 
-def at_index(i: int) -> ChainableFn:
+def at_index(i: int) -> ChainableFunction:
     """Get element at index."""
-    return ChainableFn(partial(lambda x, idx: x[idx] if len(x) > idx else None, idx=i))
+    return ChainableFunction(
+        partial(lambda x, idx: x[idx] if len(x) > idx else None, idx=i)
+    )
 
 
-def slice_range(start: int | None = None, end: int | None = None) -> ChainableFn:
+def slice_range(start: int | None = None, end: int | None = None) -> ChainableFunction:
     """Slice a sequence."""
-    return ChainableFn(partial(lambda x, s, e: x[s:e], s=start, e=end))
+    return ChainableFunction(partial(lambda x, s, e: x[s:e], s=start, e=end))
 
 
-# Type conversions as ChainableFn
-to_int = ChainableFn(int)
-to_float = ChainableFn(float)
-to_str = ChainableFn(str)
-to_bool = ChainableFn(bool)
+# Type conversions as ChainableFunction
+to_int = ChainableFunction(int)
+to_float = ChainableFunction(float)
+to_str = ChainableFunction(str)
+to_bool = ChainableFunction(bool)
 
 
 # Utility functions
-def round_to(decimals: int) -> ChainableFn:
+def round_to(decimals: int) -> ChainableFunction:
     """Round to specified decimals."""
-    return ChainableFn(partial(round, ndigits=decimals))
+    return ChainableFunction(partial(round, ndigits=decimals))
 
 
-def default_to(default_value: Any) -> ChainableFn:
+def default_to(default_value: Any) -> ChainableFunction:
     """Replace None with default value."""
-    return ChainableFn(
+    return ChainableFunction(
         partial(lambda x, default: default if x is None else x, default=default_value)
     )

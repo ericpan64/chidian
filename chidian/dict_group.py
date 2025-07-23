@@ -180,21 +180,3 @@ class DictGroup(dict):
     def __len__(self) -> int:
         """Return number of items in collection."""
         return len(self._items)
-
-    def _extract_paths(self, obj: Any, prefix: str = "") -> set[str]:
-        """Extract all paths from a nested dict."""
-        paths = set()
-
-        if isinstance(obj, dict):
-            for key, value in obj.items():
-                new_prefix = f"{prefix}.{key}" if prefix else key
-                paths.add(new_prefix)
-
-                if isinstance(value, (dict, list)):
-                    paths.update(self._extract_paths(value, new_prefix))
-        elif isinstance(obj, list) and obj:
-            # Just handle first item for schema
-            if isinstance(obj[0], dict):
-                paths.update(self._extract_paths(obj[0], prefix))
-
-        return paths

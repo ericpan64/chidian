@@ -2,8 +2,7 @@
 
 from typing import Any
 
-from chidian import DataMapping, Mapper, get
-from chidian.types import DROP, KEEP
+from chidian import DROP, KEEP, DataMapping, Mapper, get
 from tests.structstest import (
     ComplexPersonData,
     FlatPersonData,

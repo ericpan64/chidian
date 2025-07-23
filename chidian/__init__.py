@@ -1,10 +1,10 @@
 from .core import get, put
 from .data_mapping import DataMapping
 from .dict_group import DictGroup
-from .dsl_parser import parse_path_peg as parse_path
+from .lib.dsl_parser import parse_path_peg as parse_path
+from .lib.types import DROP, KEEP
 from .mapper import Mapper
-from .partials import ChainableFn, FunctionChain
-from .types import DROP, KEEP
+from .partials import ChainableFunction, FunctionChain
 
 __all__ = [
     "get",
@@ -16,5 +16,5 @@ __all__ = [
     "DROP",
     "KEEP",
     "FunctionChain",
-    "ChainableFn",
+    "ChainableFunction",
 ]

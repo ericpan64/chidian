@@ -215,17 +215,19 @@ class TestMapperCalling:
 
         assert result["output"] == "test_value"
 
-    def test_mapper_forward_method(self) -> None:
-        """Test that Mapper.forward() works the same as calling."""
+    def test_mapper_callable_only(self) -> None:
+        """Test that Mapper only has __call__ method (no forward method)."""
         mapping = {"output": p.get("input")}
         mapper = Mapper(mapping)
 
         input_data = {"input": "test_value"}
 
-        result1 = mapper(input_data)
-        result2 = mapper.forward(input_data)
+        # Should work with __call__
+        result = mapper(input_data)
+        assert result == {"output": "test_value"}
 
-        assert result1 == result2
+        # Should not have forward method
+        assert not hasattr(mapper, "forward")
 
     def test_mapper_no_reverse(self) -> None:
         """Test that Mapper doesn't support reverse operations."""

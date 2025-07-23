@@ -108,9 +108,9 @@ class TestPropertyBasedCore:
         multiply_result = p.multiply(2)(value)
         assert multiply_result == value * 2
 
-        # Test chain consistency with ChainableFn
-        add_chainable = p.ChainableFn(p.add(5))
-        multiply_chainable = p.ChainableFn(p.multiply(2))
+        # Test chain consistency with ChainableFunction
+        add_chainable = p.ChainableFunction(p.add(5))
+        multiply_chainable = p.ChainableFunction(p.multiply(2))
         chain_result = (add_chainable >> multiply_chainable)(value)
         assert chain_result == (value + 5) * 2
 

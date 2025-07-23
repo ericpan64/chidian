@@ -26,12 +26,8 @@ class Mapper:
 
         self.mapping = mapping
 
-    def forward(self, data: dict[str, Any]) -> dict[str, Any]:
+    def __call__(self, data: dict[str, Any]) -> dict[str, Any]:
         """Apply the transformation to input data."""
-        return self._apply_dict_mapping(data)
-
-    def _apply_dict_mapping(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Apply dictionary mapping to data."""
         result = {}
 
         for target_field, mapping_spec in self.mapping.items():
@@ -43,7 +39,3 @@ class Mapper:
                 result[target_field] = mapping_spec
 
         return result
-
-    def __call__(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Make Mapper callable."""
-        return self.forward(data)

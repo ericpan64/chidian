@@ -33,7 +33,7 @@ def test_boolean_checks():
 
 
 def test_basic_chainable_fn():
-    """Test basic ChainableFn functionality."""
+    """Test basic ChainableFunction functionality."""
     # Single operations
     assert p.upper("hello") == "HELLO"
     assert p.lower("WORLD") == "world"
@@ -42,13 +42,13 @@ def test_basic_chainable_fn():
 
 def test_function_chain_creation():
     """Test creating FunctionChain with >> operator."""
-    # ChainableFn >> ChainableFn
+    # ChainableFunction >> ChainableFunction
     chain = p.upper >> p.replace(" ", "_")
     assert isinstance(chain, p.FunctionChain)
     assert len(chain) == 2
     assert chain("hello world") == "HELLO_WORLD"
 
-    # Regular function >> ChainableFn
+    # Regular function >> ChainableFunction
     chain2 = str.strip >> p.upper
     assert chain2("  test  ") == "TEST"
 
