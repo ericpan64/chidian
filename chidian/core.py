@@ -3,16 +3,16 @@ Core get/put functions for chidian data traversal and mutation.
 """
 
 import copy
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable
 
 from .parser import Path, PathSegment, PathSegmentType, parse_path
 
 
 def get(
-    source: Any,
+    source: dict | list,
     key: str,
     default: Any = None,
-    apply: Optional[Union[Callable, List[Callable]]] = None,
+    apply: Callable | list[Callable] | None = None,
     strict: bool = False,
 ) -> Any:
     """
@@ -100,7 +100,7 @@ def traverse_path(data: Any, path: Path, strict: bool = False) -> Any:
     current = [data]
 
     for segment in path.segments:
-        next_items: List[Any] = []
+        next_items: list[Any] = []
 
         for item in current:
             if item is None:
@@ -202,9 +202,7 @@ def _traverse_index(data: Any, idx: int, strict: bool) -> Any:
         return None
 
 
-def _traverse_slice(
-    data: Any, start: Optional[int], end: Optional[int], strict: bool
-) -> Any:
+def _traverse_slice(data: Any, start: int | None, end: int | None, strict: bool) -> Any:
     """Traverse a slice in a list."""
     if not isinstance(data, list):
         if strict:
@@ -224,7 +222,7 @@ def _traverse_wildcard(data: Any, strict: bool) -> Any:
     return data
 
 
-def _traverse_tuple(data: Any, paths: List[Path], strict: bool) -> tuple:
+def _traverse_tuple(data: Any, paths: list[Path], strict: bool) -> tuple:
     """Traverse multiple paths and return as tuple."""
     results = []
     for path in paths:
@@ -233,7 +231,7 @@ def _traverse_tuple(data: Any, paths: List[Path], strict: bool) -> tuple:
     return tuple(results)
 
 
-def apply_functions(value: Any, functions: Union[Callable, List[Callable]]) -> Any:
+def apply_functions(value: Any, functions: Callable | list[Callable]) -> Any:
     """Apply a function or list of functions to a value."""
     if not isinstance(functions, list):
         functions = [functions]
@@ -322,7 +320,7 @@ def mutate_path(data: Any, path: Path, value: Any, strict: bool = False) -> None
 
 
 def _ensure_key_container(
-    current: Any, key: str, segments: List[PathSegment], index: int, strict: bool
+    current: Any, key: str, segments: list[PathSegment], index: int, strict: bool
 ) -> Any:
     """Ensure a dict exists at key, creating if needed."""
     if not isinstance(current, dict):
@@ -360,7 +358,7 @@ def _ensure_key_container(
 
 
 def _ensure_index_container(
-    current: Any, idx: int, segments: List[PathSegment], index: int, strict: bool
+    current: Any, idx: int, segments: list[PathSegment], index: int, strict: bool
 ) -> Any:
     """Ensure a list exists and has capacity for index."""
     if not isinstance(current, list):

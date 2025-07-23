@@ -1,7 +1,8 @@
 # === Get DSL ===
 #  NOTE: Assume whitespace is removed beforehand
-get_expr = key (dot key)*
+get_expr = (array_access / key) (dot key)*
 key = (list_op / single / tuple)
+array_access = single_index / multi_index
 
 # === Actionable Units ===
 single = name single_index?

@@ -123,6 +123,13 @@ class GetDSLVisitor(NodeVisitor):
 
         return PathSegment.tuple(paths)
 
+    def visit_array_access(
+        self, node: Node, visited_children: Sequence[Any]
+    ) -> PathSegment:
+        """Handle array access at the start of a path like '[0]' or '[*]'"""
+        # visited_children[0] is either single_index or multi_index
+        return visited_children[0]
+
     def visit_single_index(
         self, node: Node, visited_children: Sequence[Any]
     ) -> PathSegment:
