@@ -51,18 +51,24 @@ class Table(dict):
                     self[key] = row
                     self._row_keys[key] = i
 
-    def get(self, path: str, default: Any = None) -> list[Any]:
+    def get(self, path: str, default: Any = None) -> Union[Any, list[Any]]:
         """
-        Extract values from all rows using a path expression.
+        Extract values from rows using a path expression.
+
+        If path starts with $, extracts from a specific row only.
+        Otherwise, extracts from all rows.
 
         Uses the existing chidian.core.get() engine to navigate nested structures.
 
         Args:
-            path: Path expression (e.g., "name", "patient.id", "identifiers[0].value")
-            default: Value to use when path doesn't exist in a row
+            path: Path expression:
+                  - "$0.name" or "$bob.name": Extract from specific row
+                  - "name" or "patient.id": Extract from all rows
+            default: Value to use when path doesn't exist
 
         Returns:
-            List of values (one per row) in native Python types
+            - Single value when using $-prefixed path for specific row
+            - List of values (one per row) when extracting from all rows
 
         Examples:
             >>> t = Table([
@@ -72,11 +78,37 @@ class Table(dict):
             ... ])
             >>> t.get("name")
             ["John", "Jane", "Bob"]
-            >>> t.get("age", default=0)
-            [30, 25, 0]
-            >>> t.get("address.city", default="Unknown")
-            ["Unknown", "Unknown", "Unknown"]
+            >>> t.get("$0.name")
+            "John"
+            >>> t.get("$1.age")
+            25
+            >>> t.get("$2.age", default=0)
+            0
+            >>> t.append({"name": "Alice"}, custom_key="alice")
+            >>> t.get("$alice.name")
+            "Alice"
         """
+        # Check if path starts with $ (specific row access)
+        if path.startswith("$"):
+            # Extract row key and remaining path
+            parts = path.split(".", 1)
+            row_key = parts[0]
+
+            # Check if this key exists
+            if row_key not in self:
+                return default
+
+            # Get the specific row
+            row = self[row_key]
+
+            # If there's a remaining path, extract from the row
+            if len(parts) > 1:
+                return get(row, parts[1], default=default)
+            else:
+                # Just the row key itself, return the whole row
+                return row
+
+        # Original behavior: extract from all rows
         results = []
         for row in self._rows:
             value = get(row, path, default=default)
@@ -111,7 +143,7 @@ class Table(dict):
         """Return rows as a dict keyed by row identifiers."""
         return dict(self)
 
-    def append(self, row: dict[str, Any], key: Optional[str] = None) -> None:
+    def append(self, row: dict[str, Any], custom_key: Optional[str] = None) -> None:
         """
         Add a new row to the table.
 
@@ -120,25 +152,27 @@ class Table(dict):
 
         Args:
             row: Dictionary representing the new row
-            key: Optional row identifier (defaults to $n where n is the index)
-                 If provided and doesn't start with $, will be prefixed with $
+            custom_key: Optional row identifier (defaults to $n where n is the index)
+                        If provided and doesn't start with $, will be prefixed with $
 
         Examples:
             >>> t = Table([{"name": "John"}])
             >>> t.append({"name": "Jane", "age": 25})  # Adds 'age' column
-            >>> t.append({"name": "Bob", "city": "NYC"}, key="bob")  # Adds 'city' column
+            >>> t.append({"name": "Bob", "city": "NYC"}, custom_key="bob")  # Adds 'city' column
             >>> len(t)
             3
         """
         self._rows.append(row)
 
-        if key is None:
+        if custom_key is None:
             # Use $-prefixed index as key
             key = f"${len(self._rows) - 1}"
         else:
             # Ensure custom keys start with $
-            if not key.startswith("$"):
-                key = f"${key}"
+            if not custom_key.startswith("$"):
+                key = f"${custom_key}"
+            else:
+                key = custom_key
 
         self[key] = row
         self._row_keys[key] = len(self._rows) - 1

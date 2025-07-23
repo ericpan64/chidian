@@ -18,14 +18,55 @@ def test_basic_table():
     # Test iteration
     assert list(table) == rows
 
-    # Test dict-like access with $ syntax
+
+def test_dict_indexing():
+    """Test dict-like access with $ syntax."""
+    table = Table(
+        [
+            {"id": "p1", "name": "John", "age": 30},
+            {"id": "p2", "name": "Jane", "age": 25},
+        ]
+    )
+
+    # Test basic dict access
     assert table["$0"]["name"] == "John"
     assert table["$1"]["name"] == "Jane"
-    assert table["$2"]["name"] == "Bob"
+
+    # Test dict.get() method (inherited)
+    assert dict.get(table, "$0")["name"] == "John"
+    assert dict.get(table, "$nonexistent") is None
+    assert dict.get(table, "$nonexistent", "default") == "default"
+
+    # Test with custom keys
+    table.append({"name": "Bob", "age": 35}, custom_key="bob")
+    assert table["$bob"]["name"] == "Bob"
 
 
-def test_dict_access_and_get():
-    """Test built-in dict access and get method."""
+def test_get_method_basic():
+    """Test Table.get method for extracting values from all rows."""
+    table = Table(
+        [
+            {"name": "John", "age": 30, "city": "NYC"},
+            {"name": "Jane", "age": 25, "city": "LA"},
+            {"name": "Bob", "age": 35},  # Note: no city
+        ]
+    )
+
+    # Test simple field extraction
+    assert table.get("name") == ["John", "Jane", "Bob"]
+    assert table.get("age") == [30, 25, 35]
+
+    # Test with missing fields and default
+    assert table.get("city") == ["NYC", "LA", None]
+    assert table.get("city", default="Unknown") == ["NYC", "LA", "Unknown"]
+
+    # Test completely missing field
+    assert table.get("phone") == [None, None, None]
+    assert table.get("phone", default="N/A") == ["N/A", "N/A", "N/A"]
+
+
+def test_get_method_nested():
+    """Test Table.get method with nested paths."""
     table = Table(
         [
             {"patient": {"id": "123", "name": "John"}, "status": "active"},
@@ -34,29 +75,29 @@ def test_dict_access_and_get():
         ]
     )
 
-    # Test built-in dict access (should work as normal dict)
-    assert table["$0"]["patient"]["id"] == "123"
-    assert table["$1"]["patient"]["id"] == "456"
-    assert table["$2"]["patient"]["id"] == "789"
+    # Test nested path extraction
+    assert table.get("patient.id") == ["123", "456", "789"]
+    assert table.get("patient.name") == ["John", "Jane", "Bob"]
+    assert table.get("status") == ["active", "inactive", "active"]
 
-    # Test dict.get() method (inherited) - need to call super().get()
-    assert dict.get(table, "$0")["patient"]["name"] == "John"
-    assert dict.get(table, "$nonexistent") is None
-    assert dict.get(table, "$nonexistent", "default") == "default"
+    # Test missing nested paths
+    assert table.get("patient.age") == [None, None, None]
+    assert table.get("patient.age", default=0) == [0, 0, 0]
 
-    # Test Table.get method for extracting from all rows
-    all_ids = table.get("patient.id")
-    assert all_ids == ["123", "456", "789"]
-
-    all_names = table.get("patient.name")
-    assert all_names == ["John", "Jane", "Bob"]
-
-    all_statuses = table.get("status")
-    assert all_statuses == ["active", "inactive", "active"]
-
-    # Test get with missing paths and defaults
-    missing_field = table.get("missing_field", default="N/A")
-    assert missing_field == ["N/A", "N/A", "N/A"]
+    # Test partially missing nested structure
+    table_mixed = Table(
+        [
+            {"patient": {"id": "123", "name": "John"}},
+            {"status": "active"},  # No patient object
+            {"patient": {"id": "789"}},  # No name
+        ]
+    )
+    assert table_mixed.get("patient.name") == ["John", None, None]
+    assert table_mixed.get("patient.name", default="Unknown") == [
+        "John",
+        "Unknown",
+        "Unknown",
+    ]
 
 
 def test_filter_method():
@@ -68,7 +109,7 @@ def test_filter_method():
             {"name": "Bob", "age": 35, "active": True},
         ]
     )
-    table.append({"name": "Alice", "age": 28, "active": True}, key="alice")
+    table.append({"name": "Alice", "age": 28, "active": True}, custom_key="alice")
 
     # Filter by active status
     active_table = table.filter(lambda x: x.get("active", False))
@@ -140,7 +181,7 @@ def test_append_method():
     assert table["$0"]["name"] == "John"
 
     # Append with specific key (should get $ prefix)
-    table.append({"name": "Jane"}, key="jane_key")
+    table.append({"name": "Jane"}, custom_key="jane_key")
     assert table["$jane_key"]["name"] == "Jane"
     assert len(table) == 2
 
@@ -227,8 +268,8 @@ def test_head_tail_methods():
     assert tail_default.get("id") == [5, 6, 7, 8, 9]
 
 
-def test_complex_nested_access():
-    """Test complex nested data access."""
+def test_get_method_arrays():
+    """Test Table.get method with array paths and wildcards."""
     table = Table(
         [
             {
@@ -243,26 +284,128 @@ def test_complex_nested_access():
                     {"id": "e1", "date": "2024-01-01"},
                     {"id": "e2", "date": "2024-02-01"},
                 ],
-            }
+            },
+            {
+                "patient": {
+                    "id": "456",
+                    "identifiers": [
+                        {"system": "MRN", "value": "MRN789"},
+                    ],
+                },
+                "encounters": [],  # Empty encounters
+            },
         ]
     )
 
-    # Access nested array element using get
-    mrn = table.get("patient.identifiers[0].value")
-    assert mrn == ["MRN123"]
+    # Test array index access
+    assert table.get("patient.identifiers[0].value") == ["MRN123", "MRN789"]
+    assert table.get("patient.identifiers[1].value") == ["SSN456", None]
 
-    # Access all encounter IDs using get
-    encounter_ids = table.get("encounters[*].id")
-    assert encounter_ids == [["e1", "e2"]]
+    # Test wildcard array access
+    assert table.get("encounters[*].id") == [["e1", "e2"], []]
+    # Note: When wildcard matches single item, it returns the item directly, not wrapped in a list
+    assert table.get("patient.identifiers[*].system") == [["MRN", "SSN"], "MRN"]
 
-    # Access using dict access
-    first_patient_id = table["$0"]["patient"]["id"]
-    assert first_patient_id == "123"
+    # Test getting entire array
+    identifiers = table.get("patient.identifiers")
+    assert len(identifiers) == 2
+    assert len(identifiers[0]) == 2  # First patient has 2 identifiers
+    assert len(identifiers[1]) == 1  # Second patient has 1 identifier
 
-    # Test complex path with array using get
-    all_identifiers = table.get("patient.identifiers")
-    assert len(all_identifiers[0]) == 2
-    assert all_identifiers[0][0]["system"] == "MRN"
+    # Test with missing array paths
+    assert table.get("patient.addresses[0].city") == [None, None]
+    assert table.get("patient.addresses[0].city", default="Unknown") == [
+        "Unknown",
+        "Unknown",
+    ]
+
+
+def test_get_method_dollar_syntax():
+    """Test Table.get method with $-prefixed paths for specific row access."""
+    table = Table(
+        [
+            {"name": "John", "age": 30, "city": "NYC"},
+            {"name": "Jane", "age": 25, "city": "LA"},
+            {"name": "Bob", "age": 35},  # Note: no city
+        ]
+    )
+
+    # Test basic $-prefixed access
+    assert table.get("$0.name") == "John"
+    assert table.get("$1.age") == 25
+    assert table.get("$2.name") == "Bob"
+
+    # Test missing fields with $-prefix
+    assert table.get("$2.city") is None
+    assert table.get("$2.city", default="Unknown") == "Unknown"
+
+    # Test non-existent row keys
+    assert table.get("$99.name") is None
+    assert table.get("$99.name", default="N/A") == "N/A"
+
+    # Test getting entire row with just $key
+    row0 = table.get("$0")
+    assert row0 == {"name": "John", "age": 30, "city": "NYC"}
+
+    # Test with custom keys
+    table.append({"name": "Alice", "age": 28}, custom_key="alice")
+    assert table.get("$alice.name") == "Alice"
+    assert table.get("$alice.age") == 28
+
+    # Test nested paths with $-prefix
+    table2 = Table(
+        [
+            {"patient": {"id": "123", "name": "John"}},
+            {"patient": {"id": "456", "name": "Jane"}},
+        ]
+    )
+    assert table2.get("$0.patient.id") == "123"
+    assert table2.get("$1.patient.name") == "Jane"
+
+    # Compare with non-$ behavior (returns list)
+    assert table.get("name") == ["John", "Jane", "Bob", "Alice"]
+    assert table2.get("patient.id") == ["123", "456"]
+
+
+def test_get_method_edge_cases():
+    """Test Table.get method edge cases."""
+    # Test with empty table
+    empty_table = Table()
+    assert empty_table.get("name") == []
+    assert empty_table.get("name", default="N/A") == []
+
+    # Test with heterogeneous data types
+    table = Table(
+        [
+            {"value": "string"},
+            {"value": 123},
+            {"value": True},
+            {"value": None},
+            {"value": [1, 2, 3]},
+            {"value": {"nested": "object"}},
+        ]
+    )
+
+    values = table.get("value")
+    assert values == ["string", 123, True, None, [1, 2, 3], {"nested": "object"}]
+
+    # Test deep nesting with mixed types
+    table2 = Table(
+        [
+            {"data": {"level1": {"level2": {"level3": "deep"}}}},
+            {"data": {"level1": "shallow"}},  # Not nested as deep
+            {"data": None},  # Null data
+            {},  # Missing data entirely
+        ]
+    )
+
+    assert table2.get("data.level1.level2.level3") == ["deep", None, None, None]
+    assert table2.get("data.level1") == [
+        {"level2": {"level3": "deep"}},
+        "shallow",
+        None,
+        None,
+    ]
 
 
 def test_init_with_dict():
