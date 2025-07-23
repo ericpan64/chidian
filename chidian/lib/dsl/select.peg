@@ -1,0 +1,32 @@
+# === Table Select DSL ===
+# NOTE: Assume whitespace is removed beforehand
+
+select_expr = star / column_list
+
+# === Column Lists ===
+column_list = column_spec (whitespace? comma whitespace? column_spec)*
+
+# === Column Specification ===
+column_spec = path (whitespace? rename_op)?
+rename_op = arrow whitespace? name
+
+# === Path Expression ===
+# Reuse existing get.peg path syntax but simplified
+path = nested_path / simple_name
+nested_path = simple_name (dot path_segment)+
+path_segment = simple_name array_index?
+array_index = lbrack (number / star) rbrack
+
+# === Primitives ===
+lbrack = "["
+rbrack = "]"
+comma = ","
+arrow = "->"
+dot = "."
+star = "*"
+whitespace = ~"\\s+"
+
+# === Lexemes ===
+simple_name = ~"[a-zA-Z_][a-zA-Z0-9_-]*"
+name = ~"[a-zA-Z_][a-zA-Z0-9_-]*"
+number = ~"-?[0-9]+"

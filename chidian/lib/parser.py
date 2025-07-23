@@ -55,7 +55,7 @@ class Path:
 
 # Export the PEG parser as the main parser
 try:
-    from .dsl_parser import parse_path_peg as parse_path
+    from .get_dsl_parser import parse_path_peg as parse_path
 except ImportError:
     # Fallback if PEG parser isn't available
     def parse_path(path_str: str) -> Path:

@@ -11,8 +11,7 @@ from parsimonious.nodes import Node
 from .parser import Path, PathSegment
 
 # Load the PEG grammar
-DSL_DIR = PathLib(__file__).parent / "dsl"
-GET_PEG_PATH = DSL_DIR / "get.peg"
+GET_PEG_PATH = PathLib(__file__).parent / "dsl" / "get.peg"
 
 with open(GET_PEG_PATH, "r") as f:
     GRAMMAR_TEXT = f.read()
