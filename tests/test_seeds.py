@@ -1,8 +1,8 @@
-"""Comprehensive tests for SEED operations with Piper and DataMapping."""
+"""Comprehensive tests for SEED operations with Mapper and DataMapping."""
 
 from typing import Any
 
-from chidian import DataMapping, Piper, get
+from chidian import DataMapping, Mapper, get
 from chidian.seeds import DROP, KEEP
 from tests.structstest import (
     ComplexPersonData,
@@ -55,7 +55,7 @@ class TestSeedProcessing:
 
 
 class TestSeedsWithDataMapping:
-    """Test SEED integration with DataMapping and Piper."""
+    """Test SEED integration with DataMapping and Mapper."""
 
     def test_simple_data_flow_without_seeds(self, simple_data: dict[str, Any]) -> None:
         """Test baseline data flow without any SEED objects."""
@@ -66,8 +66,8 @@ class TestSeedsWithDataMapping:
             "is_active": p_get("data.patient.active"),
         }
 
-        piper = Piper(mapping)
-        data_mapping = DataMapping(piper, SourceData, SimpleTarget)
+        mapper = Mapper(mapping)
+        data_mapping = DataMapping(mapper, SourceData, SimpleTarget)
         result = data_mapping.forward(SourceData.model_validate(simple_data))
 
         assert isinstance(result, SimpleTarget)
@@ -78,7 +78,7 @@ class TestSeedsWithDataMapping:
         """Test KEEP objects in data transformations.
 
         Note: This test demonstrates that SEED processing is not yet implemented
-        in the current DataMapping/Piper system. KEEP objects need to be processed
+        in the current DataMapping/Mapper system. KEEP objects need to be processed
         to extract their values before Pydantic validation.
         """
         # For now, manually process KEEP objects since automatic processing isn't implemented
@@ -89,8 +89,8 @@ class TestSeedsWithDataMapping:
             "regular_value": lambda _data: "regular_string",
         }
 
-        piper = Piper(mapping)
-        data_mapping = DataMapping(piper, SourceData, KeepTestTarget)
+        mapper = Mapper(mapping)
+        data_mapping = DataMapping(mapper, SourceData, KeepTestTarget)
 
         source = SourceData(data={})
         result = data_mapping.forward(source)
@@ -153,8 +153,8 @@ class TestSeedsWithDataMapping:
             "last_previous_address": last_previous_address_transform,
         }
 
-        piper = Piper(mapping)
-        data_mapping = DataMapping(piper, ComplexPersonData, FlatPersonData)
+        mapper = Mapper(mapping)
+        data_mapping = DataMapping(mapper, ComplexPersonData, FlatPersonData)
 
         source = ComplexPersonData.model_validate(test_A)
         result = data_mapping.forward(source)

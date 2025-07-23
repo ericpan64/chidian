@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 import chidian.partials as p
-from chidian import DataMapping, Piper
+from chidian import DataMapping, Mapper
 
 
 # Test models
@@ -27,19 +27,19 @@ class Observation(BaseModel):
 class TestDataMappingBasic:
     """Test basic DataMapping functionality as forward-only validator."""
 
-    def test_simple_mapping_with_piper(self) -> None:
-        """Test DataMapping with Piper for basic field mapping."""
-        # Create a Piper for transformation
-        piper = Piper(
+    def test_simple_mapping_with_mapper(self) -> None:
+        """Test DataMapping with Mapper for basic field mapping."""
+        # Create a Mapper for transformation
+        mapper = Mapper(
             {
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             }
         )
 
-        # Create DataMapping with Piper and schemas
+        # Create DataMapping with Mapper and schemas
         data_mapping = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
         )
@@ -51,18 +51,18 @@ class TestDataMappingBasic:
         assert obs.subject_ref == "123"
         assert obs.performer == "John"
 
-    def test_complex_mapping_with_callable_piper(self) -> None:
-        """Test DataMapping with callable transformations in Piper."""
+    def test_complex_mapping_with_callable_mapper(self) -> None:
+        """Test DataMapping with callable transformations in Mapper."""
         mapping = {
             "subject_ref": lambda data: f"Patient/{data['id']}",
             "performer": lambda data: data["name"].upper(),
             "status": lambda data: "active" if data["active"] else "inactive",
         }
 
-        piper = Piper(mapping)
+        mapper = Mapper(mapping)
 
         data_mapping = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
         )
@@ -76,14 +76,14 @@ class TestDataMappingBasic:
 
     def test_no_reverse_functionality(self) -> None:
         """Test that DataMapping doesn't support reverse operations."""
-        piper = Piper(
+        mapper = Mapper(
             {
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             }
         )
         data_mapping = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
         )
@@ -100,14 +100,14 @@ class TestDataMappingValidation:
 
     def test_input_validation(self) -> None:
         """Test that DataMapping validates input against input schema."""
-        piper = Piper(
+        mapper = Mapper(
             {
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             }
         )
         data_mapping = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
         )
@@ -124,14 +124,14 @@ class TestDataMappingValidation:
     def test_output_validation(self) -> None:
         """Test that DataMapping validates output against output schema."""
 
-        # Piper that produces invalid output
+        # Mapper that produces invalid output
         mapping = {
             "invalid_field": lambda data: "value",  # Missing required fields
         }
 
-        piper = Piper(mapping)
+        mapper = Mapper(mapping)
         data_mapping = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
         )
@@ -144,33 +144,33 @@ class TestDataMappingValidation:
 
     def test_schema_validation(self) -> None:
         """Test that DataMapping validates schema types."""
-        piper = Piper({"output": p.get("input")})
+        mapper = Mapper({"output": p.get("input")})
 
         # Non-Pydantic schema should raise TypeError
         with pytest.raises(TypeError):
             DataMapping(
-                piper=piper,
+                mapper=mapper,
                 input_schema=dict,  # type: ignore  # Not a Pydantic model
                 output_schema=Observation,
             )
 
         with pytest.raises(TypeError):
             DataMapping(
-                piper=piper,
+                mapper=mapper,
                 input_schema=Patient,
                 output_schema=dict,  # type: ignore  # Not a Pydantic model
             )
 
     def test_dict_input_with_strict_mode(self) -> None:
         """Test handling of dict input in strict mode."""
-        piper = Piper(
+        mapper = Mapper(
             {
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             }
         )
         data_mapping = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
             strict=True,
@@ -184,14 +184,14 @@ class TestDataMappingValidation:
 
     def test_non_strict_mode(self) -> None:
         """Test behavior in non-strict mode."""
-        piper = Piper(
+        mapper = Mapper(
             {
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             }
         )
         data_mapping = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
             strict=False,
@@ -203,19 +203,19 @@ class TestDataMappingValidation:
         assert obs.subject_ref == "123"
 
 
-class TestDataMappingWithPiper:
-    """Test DataMapping integration with different Piper types."""
+class TestDataMappingWithMapper:
+    """Test DataMapping integration with different Mapper types."""
 
-    def test_with_dict_piper(self) -> None:
-        """Test DataMapping with dict-based Piper."""
-        piper = Piper(
+    def test_with_dict_mapper(self) -> None:
+        """Test DataMapping with dict-based Mapper."""
+        mapper = Mapper(
             {
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             }
         )
         data_mapping = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
         )
@@ -227,17 +227,17 @@ class TestDataMappingWithPiper:
         assert obs.subject_ref == "123"
         assert obs.performer == "John"
 
-    def test_with_callable_piper(self) -> None:
-        """Test DataMapping with callable transformations in Piper."""
+    def test_with_callable_mapper(self) -> None:
+        """Test DataMapping with callable transformations in Mapper."""
         mapping = {
             "subject_ref": lambda data: data["id"],
             "performer": lambda data: data["name"],
             "status": lambda data: "processed",
         }
 
-        piper = Piper(mapping)
+        mapper = Mapper(mapping)
         data_mapping = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
         )
@@ -249,21 +249,21 @@ class TestDataMappingWithPiper:
         assert obs.performer == "John"
         assert obs.status == "processed"
 
-    def test_piper_independence(self) -> None:
-        """Test that Piper works independently of DataMapping."""
-        piper = Piper({"output": p.get("input")})
+    def test_mapper_independence(self) -> None:
+        """Test that Mapper works independently of DataMapping."""
+        mapper = Mapper({"output": p.get("input")})
 
-        # Piper should work standalone
-        result = piper({"input": "test"})
+        # Mapper should work standalone
+        result = mapper({"input": "test"})
         assert result["output"] == "test"
 
-        # Same Piper can be used with DataMapping
+        # Same Mapper can be used with DataMapping
         _ = DataMapping(
-            piper=piper,
+            mapper=mapper,
             input_schema=Patient,
             output_schema=Observation,
         )
 
         # Both should work independently
-        direct_result = piper({"input": "direct"})
+        direct_result = mapper({"input": "direct"})
         assert direct_result["output"] == "direct"

@@ -12,7 +12,7 @@ chidian is a cross-language framework for composable, readable, and sharable dat
 ## 30-second tour
 ```python
 from pydantic import BaseModel
-from chidian import Piper, DataMapping
+from chidian import Mapper, DataMapping
 import chidian.partials as p
 
 # 1️⃣ Define your source & target schemas
@@ -24,10 +24,10 @@ class Target(BaseModel):
     full_name: str
     address: str
 
-# 2️⃣ Write pure dict→dict transformation logic with `Piper`
+# 2️⃣ Write pure dict→dict transformation logic with `Mapper`
 fmt = p.template("{} {} {}", skip_none=True)
 
-person_piper = Piper(
+person_mapper = Mapper(
     lambda src: {
         "full_name": fmt(
             p.get("name.first")(src),
@@ -49,7 +49,7 @@ person_piper = Piper(
 
 # 3️⃣ Wrap it with `DataMapping` for schema validation
 person_mapping = DataMapping(
-    piper=person_piper,
+    mapper=person_mapper,
     input_schema=Source,
     output_schema=Target,
 )
@@ -66,8 +66,8 @@ See the [tests](/chidian/tests) for some use-cases.
 
 | Feature          | In one line                                                                  |
 | ---------------- | ---------------------------------------------------------------------------- |
-| **Piper**        | Pure dict→dict runtime transformations – no schema required.                 |
-| **DataMapping**  | Adds Pydantic validation around a `Piper` for safe, forward-only transforms. |
+| **Mapper**       | Pure dict→dict runtime transformations – no schema required.                 |
+| **DataMapping**  | Adds Pydantic validation around a `Mapper` for safe, forward-only transforms. |
 | **Partials API** | `>>` operator chains (`split >> last >> upper`) keep lambdas away.           |
 | **DictGroup**    | Lightweight collection class: `select`, `filter`, `to_json`, arrow export.   |
 | **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |
@@ -78,7 +78,7 @@ See the [tests](/chidian/tests) for some use-cases.
 chidian treats **Pydantic v2 models as first‑class citizens**:
 
 * Validate inputs & outputs automatically with Pydantic v2
-* `DataMapping` wraps your `Piper` for IDE completion & mypy.
+* `DataMapping` wraps your `Mapper` for IDE completion & mypy.
 * You can drop down to plain dicts when prototyping with `strict=False`.
 
 

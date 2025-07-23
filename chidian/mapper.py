@@ -1,18 +1,18 @@
 from typing import Any, Callable
 
 """
-A `Piper` class for independent dict-to-dict transformations.
+A `Mapper` class for independent dict-to-dict transformations.
 
-The Piper class performs pure data transformations without schema validation.
+The Mapper class performs pure data transformations without schema validation.
 It takes a dictionary mapping where keys are target fields and values are
 transformations to apply to the source data.
 """
 
 
-class Piper:
+class Mapper:
     def __init__(self, mapping: dict[str, Callable[[dict], Any] | Any]):
         """
-        Initialize a Piper for dict-to-dict transformations.
+        Initialize a Mapper for dict-to-dict transformations.
 
         Args:
             mapping: A dictionary mapping where:
@@ -45,5 +45,5 @@ class Piper:
         return result
 
     def __call__(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Make Piper callable."""
+        """Make Mapper callable."""
         return self.forward(data)
