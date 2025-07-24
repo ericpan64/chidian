@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chidian"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -20,6 +20,10 @@ dependencies = [
     "parsimonious>=0.10.0",
     "pydantic>=2.10.6,<3.0.0", # Only Pydantic v2 is supported
 ]
+
+[tool.setuptools.package-data]
+# relative to the chidian/lib/ package directory
+"chidian.lib" = ["dsl/*.peg"]
 
 [dependency-groups]
 dev = [
