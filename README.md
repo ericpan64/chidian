@@ -6,9 +6,6 @@
 
 chidian is a pure Python framework for composable, readable, and sharable data mappings built on top of **Pydantic v2**.
 
-> [!NOTE]
-> chidian is pre-release -- v0.1 will be on PyPI soon!
-
 ## 30-second tour
 ```python
 from pydantic import BaseModel
