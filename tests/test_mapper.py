@@ -82,7 +82,7 @@ class TestMapperBasic:
             "name": full_name_transform,
             "status_display": status_transform,
             "all_codes": codes_transform,
-            "city": p.get("address") >> p.split("|") >> p.at_index(1),
+            "city": p.get("address") | p.split("|") | p.at_index(1),
             "backup_name": backup_name_transform,
         }
 
@@ -125,7 +125,7 @@ class TestMapperMapping:
         mapping = {
             "simple": p.get("path.to.value"),
             "transformed": lambda data: data.get("value", "").upper(),
-            "partial": p.get("nested.value") >> p.upper,
+            "partial": p.get("nested.value") | p.upper,
         }
         mapper = Mapper(mapping)
 
@@ -265,7 +265,7 @@ class TestMapperWithDataMapping:
 
         data_mapping = DataMapping(
             transformations={
-                "display_name": p.get("name") >> p.upper,
+                "display_name": p.get("name") | p.upper,
                 "age_group": lambda d: "adult" if d.get("age", 0) >= 18 else "child",
             },
             input_schema=InputModel,
@@ -297,7 +297,7 @@ class TestMapperWithDataMapping:
 
         data_mapping = DataMapping(
             transformations={
-                "display_name": p.get("name") >> p.upper,
+                "display_name": p.get("name") | p.upper,
                 "age_group": lambda d: "adult" if d.get("age", 0) >= 18 else "child",
             },
             input_schema=InputModel,

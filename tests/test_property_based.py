@@ -111,7 +111,7 @@ class TestPropertyBasedCore:
         # Test chain consistency with ChainableFunction
         add_chainable = p.ChainableFunction(p.add(5))
         multiply_chainable = p.ChainableFunction(p.multiply(2))
-        chain_result = (add_chainable >> multiply_chainable)(value)
+        chain_result = (add_chainable | multiply_chainable)(value)
         assert chain_result == (value + 5) * 2
 
     @given(st.lists(st.text(min_size=1, max_size=10), min_size=1, max_size=5))
@@ -158,7 +158,7 @@ class TestPropertyBasedCore:
         """Test that partials chaining doesn't crash."""
         # Simple chain that should always work
         try:
-            chain = p.strip >> p.lower >> p.upper
+            chain = p.strip | p.lower | p.upper
             result = chain(input_text)
             assert isinstance(result, str)
             assert result == input_text.strip().lower().upper()
@@ -190,7 +190,7 @@ class TestPropertyBasedHelpers:
         assert isinstance(p.strip(text), str)
 
         # Chain them
-        result = (p.strip >> p.lower >> p.upper)(text)
+        result = (p.strip | p.lower | p.upper)(text)
         assert isinstance(result, str)
 
 

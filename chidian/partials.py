@@ -19,10 +19,10 @@ class FunctionChain:
     def __init__(self, *operations: Callable):
         self.operations = list(operations)
 
-    def __rshift__(
+    def __or__(
         self, other: Callable | "FunctionChain" | "ChainableFunction"
     ) -> "FunctionChain":
-        """Chain operations with >> operator."""
+        """Chain operations with | operator."""
         if isinstance(other, FunctionChain):
             return FunctionChain(*self.operations, *other.operations)
         elif isinstance(other, ChainableFunction):
@@ -35,7 +35,7 @@ class FunctionChain:
         return reduce(lambda v, f: f(v), self.operations, value)
 
     def __repr__(self) -> str:
-        ops = " >> ".join(
+        ops = " | ".join(
             f.__name__ if hasattr(f, "__name__") else str(f) for f in self.operations
         )
         return f"FunctionChain({ops})"
@@ -46,7 +46,7 @@ class FunctionChain:
 
 
 class ChainableFunction:
-    """Wrapper to make any function/partial chainable with >>."""
+    """Wrapper to make any function/partial chainable with |."""
 
     def __init__(self, func: Callable):
         self.func = func
@@ -54,10 +54,10 @@ class ChainableFunction:
         self.__name__ = getattr(func, "__name__", repr(func))
         self.__doc__ = getattr(func, "__doc__", None)
 
-    def __rshift__(
+    def __or__(
         self, other: Callable | FunctionChain | "ChainableFunction"
     ) -> FunctionChain:
-        """Start or extend a chain with >> operator."""
+        """Start or extend a chain with | operator."""
         if isinstance(other, FunctionChain):
             return FunctionChain(self.func, *other.operations)
         elif isinstance(other, ChainableFunction):
@@ -65,7 +65,7 @@ class ChainableFunction:
         else:
             return FunctionChain(self.func, other)
 
-    def __rrshift__(self, other: Callable | FunctionChain) -> FunctionChain:
+    def __ror__(self, other: Callable | FunctionChain) -> FunctionChain:
         """Allow chaining when ChainableFunction is on the right side."""
         if isinstance(other, FunctionChain):
             return FunctionChain(*other.operations, self.func)

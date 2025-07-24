@@ -2,12 +2,12 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> Declarative, type-safe data mapping for humans. **Powered by a Rust core with ergonomic Python bindings.**
+> Declarative, type-safe data mapping for humans.
 
-chidian is a cross-language framework for composable, readable, and sharable data mappings built on top of **Pydantic _and_ a high-performance Rust engine**.
+chidian is a pure Python framework for composable, readable, and sharable data mappings built on top of **Pydantic v2**.
 
 > [!NOTE]
-> chidian is pre-release -- v0.1 will be on PyPI soon! Feel free to build the code locally (using [maturin](https://github.com/PyO3/maturin)) if you want to try it out now.
+> chidian is pre-release -- v0.1 will be on PyPI soon!
 
 ## 30-second tour
 ```python
@@ -31,10 +31,10 @@ person_mapper = Mapper(
     lambda src: {
         "full_name": fmt(
             p.get("name.first")(src),
-            p.get("name.given[*]") >> p.join(" ")(src),
+            p.get("name.given[*]") | p.join(" ")(src),
             p.get("name.suffix")(src),
         ),
-        "address": p.get("address") >> p.flatten_paths(
+        "address": p.get("address") | p.flatten_paths(
             [
                 "street[0]",
                 "street[1]",
@@ -68,7 +68,7 @@ See the [tests](/chidian/tests) for some use-cases.
 | ---------------- | ---------------------------------------------------------------------------- |
 | **Mapper**       | Pure dict→dict runtime transformations – no schema required.                 |
 | **DataMapping**  | Adds Pydantic validation around a `Mapper` for safe, forward-only transforms. |
-| **Partials API** | `>>` operator chains (`split >> last >> upper`) keep lambdas away.           |
+| **Partials API** | `|` operator chains (`split | last | upper`) keep lambdas away.           |
 | **DictGroup**    | Lightweight collection class: `select`, `filter`, `to_json`, arrow export.   |
 | **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |
 
