@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chidian"
+version = "0.1.0"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+    "parsimonious>=0.10.0",
+    "pydantic>=2.10.6,<3.0.0", # Only Pydantic v2 is supported
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "hypothesis>=6.0.0",
+    "ruff>=0.11.12",
+    "mypy>=1.14.1",
+]

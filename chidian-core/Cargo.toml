@@ -1,7 +1,0 @@
-[package]
-name = "chidian-core"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-nom.workspace = true
