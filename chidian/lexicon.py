@@ -19,11 +19,105 @@ Examples:
     'LA6699-8'
 """
 
-from typing import Optional, Union
+from __future__ import annotations
+
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Optional
+
+
+class Lexicon(Mapping[str, str]):
+    """
+    Bidirectional string mapper for code/terminology translations.
+
+    - Many->one supported by allowing tuple/list of keys.
+    - Reverse lookup returns the first key seen for a given value.
+    - Default (if set) is returned when a key/value isn't found instead of KeyError.
+    """
+
+    def __init__(
+        self,
+        mappings: Mapping[str | Sequence[str], str],
+        default: Optional[str] = None,
+        metadata: Optional[Mapping[str, str]] = None,
+    ) -> None:
+        fwd: dict[str, str] = {}
+        rev: dict[str, str] = {}
+
+        for key, value in mappings.items():
+            if not isinstance(value, str):
+                raise TypeError("Values must be strings")
+
+            if isinstance(key, str):
+                fwd[key] = value
+                if value not in rev:
+                    rev[value] = key
+                continue
+
+            if isinstance(key, Sequence) and not isinstance(key, str):
+                if len(key) == 0:
+                    raise ValueError("Empty tuple keys are not allowed")
+                for i, k in enumerate(key):
+                    if not isinstance(k, str):
+                        raise TypeError("All keys in tuples must be strings")
+                    fwd[k] = value
+                    if i == 0 and value not in rev:
+                        rev[value] = k
+                continue
+
+            raise TypeError("Keys must be strings or tuples of strings")
+
+        self._fwd = fwd
+        self._rev = rev
+        self._default = default
+        self.metadata: dict[str, str] = dict(metadata or {})
+
+    # Mapping interface
+    def __len__(self) -> int:
+        return len(self._fwd)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._fwd)
+
+    def __getitem__(self, key: str) -> str:
+        if key in self._fwd:
+            return self._fwd[key]
+        if key in self._rev:
+            return self._rev[key]
+        if self._default is not None:
+            return self._default
+        raise KeyError(f"Key '{key}' not found")
+
+    # Dict-like conveniences with bidirectional semantics
+    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:  # type: ignore[override]
+        if key in self._fwd:
+            return self._fwd[key]
+        if key in self._rev:
+            return self._rev[key]
+        return default if default is not None else self._default
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and (key in self._fwd or key in self._rev)
+
+    # Explicit helpers
+    def forward(self, key: str) -> Optional[str]:
+        return self._fwd.get(key)
+
+    def reverse(self, value: str) -> Optional[str]:
+        return self._rev.get(value)
+
+    def prefer(self, value: str, primary_key: str) -> None:
+        """Override which key is returned for reverse lookup of a value."""
+        if self._fwd.get(primary_key) != value:
+            raise ValueError(f"Key '{primary_key}' must map to value '{value}'")
+        self._rev[value] = primary_key
+
+    @classmethod
+    def builder(cls) -> LexiconBuilder:
+        return LexiconBuilder()
 
 
 class LexiconBuilder:
-    """Builder for creating Lexicon instances."""
+    """Fluent builder for creating Lexicon instances."""
 
     def __init__(self) -> None:
         self._mappings: dict[str, str] = {}
@@ -31,177 +125,45 @@ class LexiconBuilder:
         self._default: Optional[str] = None
         self._metadata: dict[str, str] = {}
 
-    def add(self, key: str, value: str) -> "LexiconBuilder":
-        """Add a single key-value mapping."""
+    def add(self, key: str, value: str) -> LexiconBuilder:
         if not isinstance(key, str) or not isinstance(value, str):
             raise TypeError("Keys and values must be strings")
-
         self._mappings[key] = value
         if value not in self._reverse_priorities:
             self._reverse_priorities[value] = key
         return self
 
-    def add_many(self, keys: list[str], value: str) -> "LexiconBuilder":
-        """Add multiple keys that map to the same value."""
+    def add_many(self, keys: Sequence[str], value: str) -> LexiconBuilder:
         if not isinstance(value, str):
             raise TypeError("Value must be a string")
-
+        if len(keys) == 0:
+            raise ValueError("Empty tuple keys are not allowed")
         for i, key in enumerate(keys):
             if not isinstance(key, str):
                 raise TypeError("All keys must be strings")
             self._mappings[key] = value
-            # First key is default for reverse
             if i == 0 and value not in self._reverse_priorities:
                 self._reverse_priorities[value] = key
         return self
 
-    def set_primary_reverse(self, value: str, primary_key: str) -> "LexiconBuilder":
-        """Override which key is returned for reverse lookup of a value."""
-        if primary_key not in self._mappings or self._mappings[primary_key] != value:
+    def set_primary_reverse(self, value: str, primary_key: str) -> LexiconBuilder:
+        if self._mappings.get(primary_key) != value:
             raise ValueError(f"Key '{primary_key}' must map to value '{value}'")
         self._reverse_priorities[value] = primary_key
         return self
 
-    def set_default(self, default: str) -> "LexiconBuilder":
-        """Set default value for missing keys."""
+    def set_default(self, default: str) -> LexiconBuilder:
         if not isinstance(default, str):
             raise TypeError("Default must be a string")
         self._default = default
         return self
 
-    def set_metadata(self, metadata: dict[str, str]) -> "LexiconBuilder":
-        """Set metadata for the lexicon."""
-        self._metadata = metadata
+    def set_metadata(self, metadata: Mapping[str, str]) -> LexiconBuilder:
+        self._metadata = dict(metadata)
         return self
 
-    def build(self) -> "Lexicon":
-        """Build and return the Lexicon instance."""
-        lexicon = Lexicon.__new__(Lexicon)
-        super(Lexicon, lexicon).__init__(self._mappings)
-        lexicon._default = self._default
-        lexicon._reverse = self._reverse_priorities.copy()
-        lexicon.metadata = self._metadata
-
-        return lexicon
-
-
-class Lexicon(dict):
-    def __init__(
-        self,
-        mappings: dict[Union[str, tuple], str],
-        default: Optional[str] = None,
-        metadata: Optional[dict] = None,
-    ):
-        """
-        Initialize a bidirectional string mapper.
-
-        Args:
-            mappings: Dict of mappings. Keys can be strings or tuples (for many-to-one).
-            default: Default value to return for missing keys
-            metadata: Optional metadata about the mapping (version, source, etc.)
-        """
-        # Process mappings to flatten tuples
-        flat_mappings = {}
-        reverse_priorities = {}
-
-        for key, value in mappings.items():
-            # Validate value type
-            if not isinstance(value, str):
-                raise TypeError("Values must be strings")
-
-            if isinstance(key, tuple):
-                # Many-to-one mapping
-                if len(key) == 0:
-                    raise ValueError("Empty tuple keys are not allowed")
-
-                for i, k in enumerate(key):
-                    if not isinstance(k, str):
-                        raise TypeError("All keys in tuples must be strings")
-                    flat_mappings[k] = value
-                    # First element is default for reverse
-                    if i == 0 and value not in reverse_priorities:
-                        reverse_priorities[value] = k
-            else:
-                # One-to-one mapping
-                if not isinstance(key, str):
-                    raise TypeError("Keys must be strings or tuples of strings")
-                flat_mappings[key] = value
-                if value not in reverse_priorities:
-                    reverse_priorities[value] = key
-
-        # Initialize dict with flat mappings
-        super().__init__(flat_mappings)
-        self._default = default
-        self._reverse = reverse_priorities
-        self.metadata = metadata or {}
-
-    def __getitem__(self, key: str) -> str:
-        """
-        Bidirectional lookup with dict syntax.
-        Scans keys first, then values.
-        """
-        # Try forward lookup first (check in dict keys)
-        if super().__contains__(key):
-            return super().__getitem__(key)
-
-        # Try reverse lookup
-        # First check if it's in our reverse priority mapping
-        if key in self._reverse:
-            return self._reverse[key]
-
-        # If not in priority mapping, search all values
-        for k, v in self.items():
-            if v == key:
-                return k
-
-        # Check if we have a default value
-        if self._default is not None:
-            return self._default
-
-        # Raise KeyError if not found and no default
-        raise KeyError(f"Key '{key}' not found")
-
-    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:  # type: ignore[override]
-        """
-        Safe bidirectional lookup with default.
-        Scans keys first, then values.
-        """
-        # Try forward lookup first (check in dict keys)
-        if super().__contains__(key):
-            return super().__getitem__(key)
-
-        # Try reverse lookup
-        # First check if it's in our reverse priority mapping
-        if key in self._reverse:
-            return self._reverse[key]
-
-        # If not in priority mapping, search all values
-        for k, v in self.items():
-            if v == key:
-                return k
-
-        # Key doesn't exist, use provided default if given, otherwise instance default
-        return default if default is not None else self._default
-
-    def __contains__(self, key: object) -> bool:
-        """Check if key exists in either forward or reverse mapping."""
-        if isinstance(key, str):
-            return super().__contains__(key) or key in self._reverse
-        return False
-
-    def forward(self, key: str) -> Optional[str]:
-        """Transform from source to target format."""
-        return super().get(key)
-
-    def reverse(self, key: str) -> Optional[str]:
-        """Transform from target back to source format."""
-        return self._reverse.get(key)
-
-    def can_reverse(self) -> bool:
-        """Lexicon always supports reverse transformation."""
-        return True
-
-    @classmethod
-    def builder(cls) -> LexiconBuilder:
-        """Create a new LexiconBuilder instance."""
-        return LexiconBuilder()
+    def build(self) -> Lexicon:
+        lex = Lexicon(self._mappings, default=self._default, metadata=self._metadata)  # type: ignore
+        for value, primary in self._reverse_priorities.items():
+            lex.prefer(value, primary)
+        return lex
