@@ -731,6 +731,38 @@ class Table(dict):
 
         return Table(result_rows)
 
+    def __getitem__(self, key: str) -> Any:
+        """
+        Enhanced dict access with dot syntax support.
+
+        Supports both traditional dict access and path-based access:
+        - table["$0"] → returns the row dict (traditional)
+        - table["$0.name"] → extracts value using path syntax
+        - table["column"] → extracts column values from all rows (same as get())
+
+        Args:
+            key: Either a row key ("$0") or a path expression ("$0.name", "column")
+
+        Returns:
+            For row keys: the row dict
+            For path expressions: the extracted value(s)
+
+        Examples:
+            >>> table["$0"]  # Get entire row
+            {"name": "John", "age": 30}
+            >>> table["$0.name"]  # Get specific field from row
+            "John"
+            >>> table["name"]  # Get column from all rows
+            ["John", "Jane", "Bob"]
+        """
+        # Check if this is a path expression (contains dot)
+        if "." in key:
+            # Use the get() method which handles path syntax
+            return self.get(key)
+
+        # Traditional dict access - delegate to parent
+        return super().__getitem__(key)
+
     def head(self, n: int = 5) -> "Table":
         """
         Return first n rows.

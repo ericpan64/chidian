@@ -29,8 +29,8 @@ def test_dict_indexing():
     )
 
     # Test basic dict access
-    assert table["$0"]["name"] == "John"
-    assert table["$1"]["name"] == "Jane"
+    assert table["$0.name"] == "John"
+    assert table["$1.name"] == "Jane"
 
     # Test dict.get() method (inherited)
     assert dict.get(table, "$0")["name"] == "John"
@@ -119,15 +119,15 @@ def test_filter_method():
     assert "$0" in active_table
     assert "$1" in active_table
     assert "$2" in active_table
-    assert active_table["$0"]["name"] == "John"
-    assert active_table["$1"]["name"] == "Bob"
-    assert active_table["$2"]["name"] == "Alice"
+    assert active_table["$0.name"] == "John"
+    assert active_table["$1.name"] == "Bob"
+    assert active_table["$2.name"] == "Alice"
 
     # Filter by age
     young_table = table.filter(lambda x: x.get("age", 0) < 30)
     assert len(young_table) == 2
-    assert list(young_table)[0]["name"] == "Jane"
-    assert list(young_table)[1]["name"] == "Alice"
+    assert young_table["$0.name"] == "Jane"
+    assert young_table["$1.name"] == "Alice"
 
 
 def test_map_method():
@@ -178,20 +178,20 @@ def test_append_method():
     # Append with auto-generated key
     table.append({"name": "John"})
     assert len(table) == 1
-    assert table["$0"]["name"] == "John"
+    assert table["$0.name"] == "John"
 
     # Append with specific key (should get $ prefix)
     table.append({"name": "Jane"}, custom_key="jane_key")
-    assert table["$jane_key"]["name"] == "Jane"
+    assert table["$jane_key.name"] == "Jane"
     assert len(table) == 2
 
     # Append another auto-keyed row
     table.append({"name": "Bob"})
-    assert table["$2"]["name"] == "Bob"
+    assert table["$2.name"] == "Bob"
     assert len(table) == 3
 
     # Test accessing named row with dict access
-    assert table["$jane_key"]["name"] == "Jane"
+    assert table["$jane_key.name"] == "Jane"
 
 
 def test_unique_method():
@@ -417,8 +417,8 @@ def test_init_with_dict():
     assert len(table) == 2
     assert "$user1" in table
     assert "$user2" in table
-    assert table["$user1"]["name"] == "John"
-    assert table["$user2"]["name"] == "Jane"
+    assert table["$user1.name"] == "John"
+    assert table["$user2.name"] == "Jane"
 
 
 def test_empty_table():
