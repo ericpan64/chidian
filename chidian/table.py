@@ -12,11 +12,10 @@ Supports path-based queries, filtering, mapping, and other functional operations
 """
 
 
-class Table(dict):
+class Table:
     def __init__(
         self,
         rows: Union[list[dict[str, Any]], dict[str, dict[str, Any]], None] = None,
-        **kwargs,
     ):
         """
         Initialize a Table from rows.
@@ -26,11 +25,10 @@ class Table(dict):
                 - list[dict]: Each dict is a row, auto-keyed by index ($0, $1, ...)
                 - dict[str, dict]: Pre-keyed rows (keys preserved)
                 - None: Empty table
-            **kwargs: Additional dict initialization parameters
         """
-        super().__init__(**kwargs)
         self._rows: list[dict[str, Any]] = []
         self._row_keys: dict[str, int] = {}  # Maps row keys to indices
+        self._key_to_row: dict[str, dict[str, Any]] = {}  # Maps $ keys to row dicts
 
         # Initialize rows based on input type
         if rows is not None:
@@ -39,7 +37,7 @@ class Table(dict):
                 # Store rows by index using $-syntax
                 for i, row in enumerate(rows):
                     key = f"${i}"
-                    self[key] = row
+                    self._key_to_row[key] = row
                     self._row_keys[key] = i
             elif isinstance(rows, dict):
                 self._rows = list(rows.values())
@@ -48,7 +46,7 @@ class Table(dict):
                     # Ensure keys start with $ for consistency
                     if not key.startswith("$"):
                         key = f"${key}"
-                    self[key] = row
+                    self._key_to_row[key] = row
                     self._row_keys[key] = i
 
     def get(self, path: str, default: Any = None) -> Union[Any, list[Any]]:
@@ -95,11 +93,11 @@ class Table(dict):
             row_key = parts[0]
 
             # Check if this key exists
-            if row_key not in self:
+            if row_key not in self._key_to_row:
                 return default
 
             # Get the specific row
-            row = self[row_key]
+            row = self._key_to_row[row_key]
 
             # If there's a remaining path, extract from the row
             if len(parts) > 1:
@@ -141,7 +139,7 @@ class Table(dict):
 
     def to_dict(self) -> dict[str, dict[str, Any]]:
         """Return rows as a dict keyed by row identifiers."""
-        return dict(self)
+        return self._key_to_row.copy()
 
     def append(self, row: dict[str, Any], custom_key: Optional[str] = None) -> None:
         """
@@ -174,7 +172,7 @@ class Table(dict):
             else:
                 key = custom_key
 
-        self[key] = row
+        self._key_to_row[key] = row
         self._row_keys[key] = len(self._rows) - 1
 
     def filter(self, predicate: Union[str, Callable[[dict], bool]]) -> "Table":
@@ -733,10 +731,10 @@ class Table(dict):
 
     def __getitem__(self, key: str) -> Any:
         """
-        Enhanced dict access with dot syntax support.
+        Enhanced access with dot syntax support.
 
-        Supports both traditional dict access and path-based access:
-        - table["$0"] → returns the row dict (traditional)
+        Supports both row access and path-based access:
+        - table["$0"] → returns the row dict
         - table["$0.name"] → extracts value using path syntax
         - table["column"] → extracts column values from all rows (same as get())
 
@@ -755,13 +753,28 @@ class Table(dict):
             >>> table["name"]  # Get column from all rows
             ["John", "Jane", "Bob"]
         """
-        # Check if this is a path expression (contains dot)
-        if "." in key:
+        # Check if this is a path expression (contains dot) or column access
+        if "." in key or not key.startswith("$"):
             # Use the get() method which handles path syntax
             return self.get(key)
 
-        # Traditional dict access - delegate to parent
-        return super().__getitem__(key)
+        # Row key access
+        if key in self._key_to_row:
+            return self._key_to_row[key]
+        else:
+            raise KeyError(key)
+
+    def __contains__(self, key: str) -> bool:
+        """Check if a row key exists in the table."""
+        return key in self._key_to_row
+
+    def __setitem__(self, key: str, value: dict[str, Any]) -> None:
+        """Set a row by key (mainly for internal use)."""
+        if not key.startswith("$"):
+            raise ValueError("Row keys must start with '$'")
+        self._key_to_row[key] = value
+        # Note: This doesn't update _rows or _row_keys for simplicity
+        # Main usage should be through append() method
 
     def head(self, n: int = 5) -> "Table":
         """

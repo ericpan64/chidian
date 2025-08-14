@@ -32,10 +32,10 @@ def test_dict_indexing():
     assert table["$0.name"] == "John"
     assert table["$1.name"] == "Jane"
 
-    # Test dict.get() method (inherited)
-    assert dict.get(table, "$0")["name"] == "John"
-    assert dict.get(table, "$nonexistent") is None
-    assert dict.get(table, "$nonexistent", "default") == "default"
+    # Test __contains__ method
+    assert "$0" in table
+    assert "$1" in table
+    assert "$nonexistent" not in table
 
     # Test with custom keys
     table.append({"name": "Bob", "age": 35}, custom_key="bob")
