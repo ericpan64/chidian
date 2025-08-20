@@ -1,6 +1,14 @@
-from typing import Any, Callable, Iterator, Optional, Union
+import csv
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Union
 
 from .core import get
+
+if TYPE_CHECKING:
+    import pandas as pd
+    import polars as pl
 
 """
 A `Table` is a lightweight, sparse table implementation that treats a collection of dictionaries as rows in a table.
@@ -823,3 +831,791 @@ class Table:
             2
         """
         return len(self._rows)
+
+    def __repr__(self) -> str:
+        """
+        Return a concise representation of the Table.
+
+        Examples:
+            >>> t = Table([{"id": 1, "name": "John"}, {"id": 2, "name": "Jane"}])
+            >>> repr(t)
+            '<Table: 2 rows × 2 columns>'
+        """
+        num_rows = len(self._rows)
+        num_cols = len(self.columns)
+        return f"<Table: {num_rows} row{'s' if num_rows != 1 else ''} × {num_cols} column{'s' if num_cols != 1 else ''}>"
+
+    def __str__(self) -> str:
+        """
+        Return a pretty-printed string representation of the Table.
+        Shows the first 5 rows by default.
+
+        Examples:
+            >>> t = Table([{"name": "John", "age": 30}, {"name": "Jane", "age": 25}])
+            >>> print(t)
+              $key | name | age
+            -------|------|-----
+              $0   | John | 30
+              $1   | Jane | 25
+        """
+        return self.show(n=5)
+
+    def show(self, n: int = 5, truncate: int = 50, max_col_width: int = 20) -> str:
+        """
+        Return a formatted string representation of the Table.
+
+        Args:
+            n: Number of rows to display (default: 5)
+            truncate: Maximum length for cell values before truncation (default: 50)
+            max_col_width: Maximum column width for display (default: 20)
+
+        Returns:
+            Formatted string representation of the table
+
+        Examples:
+            >>> t = Table([{"name": "John", "age": 30}, {"name": "Jane", "age": 25}])
+            >>> print(t.show(n=10))  # Show up to 10 rows
+        """
+        if len(self._rows) == 0:
+            return "<Empty Table>"
+
+        # Get the rows to display
+        display_rows = self._rows[:n]
+        has_more = len(self._rows) > n
+
+        # Get all columns from displayed rows
+        columns: list[str] = []
+        for row in display_rows:
+            columns.extend(row.keys())
+        columns = list(dict.fromkeys(columns))  # Preserve order, remove duplicates
+
+        # Prepare data for display
+        # First column is the row key
+        headers = ["$key"] + columns
+
+        # Format cell values
+        formatted_rows: list[list[str]] = []
+        for i, row in enumerate(display_rows):
+            # Find the row key
+            row_key = None
+            for key, idx in self._row_keys.items():
+                if idx == i:
+                    row_key = key
+                    break
+            if row_key is None:
+                row_key = f"${i}"
+
+            formatted_row = [row_key]
+            for col in columns:
+                value = row.get(col)
+                formatted_value = self._format_value(value, truncate)
+                formatted_row.append(formatted_value)
+            formatted_rows.append(formatted_row)
+
+        # Calculate column widths
+        col_widths: list[int] = []
+        for i, header in enumerate(headers):
+            width = min(len(str(header)), max_col_width)
+            for row in formatted_rows:  # type: ignore
+                if i < len(row):
+                    width = max(width, min(len(str(row[i])), max_col_width))  # type: ignore
+            col_widths.append(width)
+
+        # Build the table string
+        lines = []
+
+        # Header row
+        header_parts = []
+        for header, width in zip(headers, col_widths):
+            header_str = str(header)
+            if len(header_str) > width:
+                header_str = header_str[: width - 3] + "..."
+            header_parts.append(f"  {header_str:<{width}}")
+        lines.append(" |".join(header_parts))
+
+        # Separator
+        separator_parts = ["-" * (width + 2) for width in col_widths]
+        lines.append("-+-".join(separator_parts))
+
+        # Data rows
+        for formatted_row in formatted_rows:
+            row_parts = []
+            for value, width in zip(formatted_row, col_widths):
+                value_str = str(value)
+                if len(value_str) > width:
+                    value_str = value_str[: width - 3] + "..."
+                row_parts.append(f"  {value_str:<{width}}")
+            lines.append(" |".join(row_parts))
+
+        # Add indicator if there are more rows
+        if has_more:
+            remaining = len(self._rows) - n
+            lines.append(f"... {remaining} more row{'s' if remaining != 1 else ''}")
+
+        return "\n".join(lines)
+
+    def _format_value(self, value: Any, max_length: int = 50) -> str:
+        """
+        Format a value for display in the table.
+
+        Args:
+            value: The value to format
+            max_length: Maximum length before truncation
+
+        Returns:
+            Formatted string representation
+        """
+        if value is None:
+            return "None"
+        elif isinstance(value, (dict, list)):
+            # Use compact JSON representation for complex types
+            import json
+
+            json_str = json.dumps(value, separators=(",", ":"))
+            if len(json_str) > max_length:
+                return json_str[: max_length - 3] + "..."
+            return json_str
+        elif isinstance(value, bool):
+            return str(value)
+        elif isinstance(value, (int, float)):
+            return str(value)
+        else:
+            str_value = str(value)
+            if len(str_value) > max_length:
+                return str_value[: max_length - 3] + "..."
+            return str_value
+
+    def to_pandas(
+        self, *, index: bool = False, index_name: str = "_index"
+    ) -> "pd.DataFrame":
+        """
+        Convert Table to pandas DataFrame.
+
+        Args:
+            index: If True, use row keys ($0, $1, etc.) as DataFrame index
+            index_name: Name for the index column when index=True
+
+        Returns:
+            pandas.DataFrame with Table data
+
+        Examples:
+            >>> # Basic conversion
+            >>> df = table.to_pandas()
+
+            >>> # With index from row keys
+            >>> df = table.to_pandas(index=True)
+
+            >>> # Custom index name
+            >>> df = table.to_pandas(index=True, index_name="row_id")
+
+        Note: Requires pandas to be installed: pip install 'chidian[pandas]'
+        """
+        try:
+            import pandas as pd  # type: ignore
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "pandas not installed. pip install 'chidian[pandas]'"
+            ) from e
+
+        if not index:
+            return pd.DataFrame(self.to_list())
+
+        rows = [
+            {
+                index_name: (k[1:] if isinstance(k, str) and k.startswith("$") else k),
+                **row,
+            }
+            for k, row in self.to_dict().items()
+        ]
+        return pd.DataFrame(rows).set_index(index_name)
+
+    def to_polars(
+        self, *, add_index: bool = False, index_name: str = "_index"
+    ) -> "pl.DataFrame":
+        """
+        Convert Table to polars DataFrame.
+
+        Args:
+            add_index: If True, add row keys ($0, $1, etc.) as a column
+            index_name: Name for the index column when add_index=True
+
+        Returns:
+            polars.DataFrame with Table data
+
+        Examples:
+            >>> # Basic conversion
+            >>> df = table.to_polars()
+
+            >>> # With index column from row keys
+            >>> df = table.to_polars(add_index=True)
+
+            >>> # Custom index column name
+            >>> df = table.to_polars(add_index=True, index_name="row_id")
+
+        Note: Requires polars to be installed: pip install 'chidian[polars]'
+        """
+        try:
+            import polars as pl  # type: ignore
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "polars not installed. pip install 'chidian[polars]'"
+            ) from e
+
+        if len(self._rows) == 0:
+            # Handle empty table case - polars needs schema for empty data
+            return pl.DataFrame()
+
+        if not add_index:
+            return pl.from_dicts(self.to_list())
+
+        rows = [
+            {
+                index_name: (k[1:] if isinstance(k, str) and k.startswith("$") else k),
+                **row,
+            }
+            for k, row in self.to_dict().items()
+        ]
+        return pl.from_dicts(rows)
+
+    @classmethod
+    def from_csv(
+        cls,
+        path: str | Path,
+        *,
+        delimiter: str = ",",
+        encoding: str = "utf-8",
+        header: bool | int = True,
+        columns: list[str] | None = None,
+        dtypes: dict[str, type] | None = None,
+        parse_dates: bool | list[str] = False,
+        null_values: list[str] | None = None,
+        skip_rows: int = 0,
+        max_rows: int | None = None,
+    ) -> "Table":
+        """
+        Create a Table from a CSV file.
+
+        Args:
+            path: Path to the CSV file
+            delimiter: Field delimiter (default: ",")
+            encoding: File encoding (default: "utf-8")
+            header: Whether first row contains headers (True),
+                    row index of headers (int), or no headers (False)
+            columns: Column names to use (overrides file headers)
+            dtypes: Dict mapping column names to types for parsing
+            parse_dates: Parse date columns. If True, auto-detect.
+                         If list, parse specified columns as dates
+            null_values: List of strings to interpret as null/None
+            skip_rows: Number of rows to skip from beginning
+            max_rows: Maximum number of rows to read
+
+        Returns:
+            New Table with CSV data as rows
+
+        Examples:
+            >>> # Basic usage
+            >>> table = Table.from_csv("data.csv")
+
+            >>> # Custom delimiter and encoding
+            >>> table = Table.from_csv("data.tsv", delimiter="\t", encoding="latin-1")
+
+            >>> # Specify column types
+            >>> table = Table.from_csv("data.csv", dtypes={
+            ...     "age": int,
+            ...     "salary": float,
+            ...     "active": bool
+            ... })
+
+            >>> # Parse date columns
+            >>> table = Table.from_csv("orders.csv", parse_dates=["order_date", "ship_date"])
+
+            >>> # Handle missing values
+            >>> table = Table.from_csv("data.csv", null_values=["NA", "N/A", "null", ""])
+        """
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"CSV file not found: {path}")
+
+        # Default null values if not specified
+        if null_values is None:
+            null_values = ["NA", "N/A", "null", ""]
+
+        rows = []
+
+        try:
+            with open(path, "r", encoding=encoding, newline="") as f:
+                # Skip initial rows if requested
+                for _ in range(skip_rows):
+                    next(f, None)
+
+                reader = csv.reader(f, delimiter=delimiter)
+
+                # Handle header
+                first_data_row = None
+                if header is True:
+                    # First row is header
+                    file_columns = next(reader, [])
+                elif isinstance(header, int) and header is not False:
+                    # Header at specific row index
+                    for _ in range(header):
+                        next(reader, None)
+                    file_columns = next(reader, [])
+                else:
+                    # No header - first row is data
+                    file_columns = None
+                    first_data_row = next(reader, None)
+
+                # Use provided columns or file columns or generate numeric columns
+                if columns:
+                    column_names = columns
+                elif file_columns:
+                    column_names = file_columns
+                else:
+                    # Generate column names based on first row
+                    if first_data_row:
+                        column_names = [f"col_{i}" for i in range(len(first_data_row))]
+                    else:
+                        column_names = []
+
+                # Process the first data row if we read it during header handling
+                if first_data_row and column_names:
+                    # Handle column count mismatch
+                    row_data = first_data_row[:]  # Make a copy
+                    if len(row_data) != len(column_names):
+                        if len(row_data) < len(column_names):
+                            # Pad with empty strings (will be converted to None later if in null_values)
+                            row_data.extend([""] * (len(column_names) - len(row_data)))
+                        else:
+                            # Truncate
+                            row_data = row_data[: len(column_names)]
+
+                    row_dict = cls._process_csv_row(
+                        row_data, column_names, dtypes, parse_dates, null_values
+                    )
+                    rows.append(row_dict)
+
+                # Read remaining rows
+                row_count = len(rows)  # Account for any rows already processed
+                for row_data in reader:
+                    if max_rows and row_count >= max_rows:
+                        break
+
+                    if len(row_data) != len(column_names):
+                        # Handle rows with different number of columns
+                        if len(row_data) < len(column_names):
+                            # Pad with empty strings (will be converted to None later if in null_values)
+                            row_data.extend([""] * (len(column_names) - len(row_data)))
+                        else:
+                            # Truncate
+                            row_data = row_data[: len(column_names)]
+
+                    row_dict = cls._process_csv_row(
+                        row_data, column_names, dtypes, parse_dates, null_values
+                    )
+                    rows.append(row_dict)
+                    row_count += 1
+
+        except PermissionError:
+            raise PermissionError(f"Permission denied reading file: {path}")
+        except Exception as e:
+            raise ValueError(f"Error reading CSV file {path}: {e}")
+
+        return cls(rows)
+
+    @classmethod
+    def _process_csv_row(
+        cls,
+        row_data: list[str],
+        column_names: list[str],
+        dtypes: dict[str, type] | None,
+        parse_dates: bool | list[str],
+        null_values: list[str],
+    ) -> dict[str, Any]:
+        """Process a single CSV row, applying type conversions."""
+        row_dict: dict[str, Any] = {}
+
+        for col_name, value in zip(column_names, row_data):
+            # Check for null values
+            if value in null_values:
+                row_dict[col_name] = None
+                continue
+
+            # Apply type conversion
+            if dtypes and col_name in dtypes:
+                # Explicit type conversion
+                try:
+                    if dtypes[col_name] is bool:
+                        row_dict[col_name] = value.lower() in ("true", "1", "yes", "y")
+                    else:
+                        row_dict[col_name] = dtypes[col_name](value)
+                except (ValueError, TypeError):
+                    # Keep as string if conversion fails
+                    row_dict[col_name] = value  # type: ignore
+            elif parse_dates:
+                # Date parsing
+                if (isinstance(parse_dates, list) and col_name in parse_dates) or (
+                    parse_dates is True and cls._looks_like_date(value)
+                ):
+                    try:
+                        # Try common date formats
+                        for fmt in [
+                            "%Y-%m-%d",
+                            "%Y/%m/%d",
+                            "%m/%d/%Y",
+                            "%d/%m/%Y",
+                            "%Y-%m-%d %H:%M:%S",
+                            "%Y/%m/%d %H:%M:%S",
+                        ]:
+                            try:
+                                row_dict[col_name] = datetime.strptime(value, fmt)  # type: ignore
+                                break
+                            except ValueError:
+                                continue
+                        else:
+                            # No format matched, keep as string
+                            row_dict[col_name] = value  # type: ignore
+                    except Exception:
+                        row_dict[col_name] = value  # type: ignore
+                else:
+                    # Auto-infer type
+                    row_dict[col_name] = cls._infer_type(value)
+            else:
+                # Auto-infer type
+                row_dict[col_name] = cls._infer_type(value)
+
+        return row_dict
+
+    @classmethod
+    def _infer_type(cls, value: str) -> Any:
+        """Attempt to infer and convert string value to appropriate type."""
+        # Handle None case
+        if value is None:
+            return None
+
+        # Check for boolean
+        if value.lower() in ("true", "false"):
+            return value.lower() == "true"
+
+        # Try integer
+        try:
+            return int(value)
+        except ValueError:
+            pass
+
+        # Try float
+        try:
+            return float(value)
+        except ValueError:
+            pass
+
+        # Check if it looks like JSON
+        if (value.startswith("{") and value.endswith("}")) or (
+            value.startswith("[") and value.endswith("]")
+        ):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                pass
+
+        # Return as string
+        return value
+
+    @classmethod
+    def _looks_like_date(cls, value: str) -> bool:
+        """Heuristic to check if a string looks like a date."""
+        # Simple heuristics
+        if len(value) < 6 or len(value) > 30:
+            return False
+
+        # Check for common date separators and patterns
+        date_indicators = ["-", "/", ":", "20", "19"]
+        matches = sum(1 for indicator in date_indicators if indicator in value)
+        return matches >= 2
+
+    def to_csv(
+        self,
+        path: str | Path,
+        *,
+        delimiter: str = ",",
+        encoding: str = "utf-8",
+        header: bool = True,
+        columns: list[str] | None = None,
+        index: bool = False,
+        null_value: str = "",
+        float_format: str | None = None,
+        date_format: str | None = None,
+        mode: str = "w",
+    ) -> None:
+        """
+        Write the Table to a CSV file.
+
+        Args:
+            path: Output file path
+            delimiter: Field delimiter (default: ",")
+            encoding: File encoding (default: "utf-8")
+            header: Whether to write column headers
+            columns: Specific columns to write (default: all columns)
+            index: Whether to write row keys as first column
+            null_value: String representation for None values
+            float_format: Format string for floating point numbers (e.g., "%.2f")
+            date_format: Format string for datetime objects (e.g., "%Y-%m-%d")
+            mode: File write mode ("w" for overwrite, "a" for append)
+
+        Examples:
+            >>> # Basic export
+            >>> table.to_csv("output.csv")
+
+            >>> # Tab-separated with specific columns
+            >>> table.to_csv("output.tsv", delimiter="\t", columns=["name", "age", "city"])
+
+            >>> # Include row keys and format numbers
+            >>> table.to_csv("output.csv", index=True, float_format="%.2f")
+
+            >>> # Append to existing file
+            >>> table.to_csv("output.csv", mode="a", header=False)
+        """
+        path = Path(path)
+
+        # Determine columns to write
+        if columns:
+            write_columns = columns
+        else:
+            # Get all columns from the table
+            write_columns = list(self.columns)
+
+        # Add index column if requested
+        if index:
+            write_columns = ["_index"] + write_columns
+
+        try:
+            with open(path, mode, encoding=encoding, newline="") as f:
+                writer = csv.DictWriter(
+                    f,
+                    fieldnames=write_columns,
+                    delimiter=delimiter,
+                    extrasaction="ignore",  # Ignore extra fields not in fieldnames
+                )
+
+                # Write header if requested
+                if header:
+                    writer.writeheader()
+
+                # Write rows
+                for i, row in enumerate(self._rows):
+                    write_row = {}
+
+                    # Add index if requested
+                    if index:
+                        # Get the row key
+                        row_key = None
+                        for key, idx in self._row_keys.items():
+                            if idx == i:
+                                row_key = key
+                                break
+                        write_row["_index"] = row_key or f"${i}"
+
+                    # Process each column
+                    for col in write_columns:
+                        if col == "_index":
+                            continue  # Already handled
+
+                        value = row.get(col)
+
+                        # Format the value
+                        if value is None:
+                            write_row[col] = null_value
+                        elif isinstance(value, float) and float_format:
+                            write_row[col] = float_format % value
+                        elif isinstance(value, datetime) and date_format:
+                            write_row[col] = value.strftime(date_format)
+                        elif isinstance(value, (dict, list)):
+                            # Serialize complex types as JSON
+                            write_row[col] = json.dumps(value)
+                        else:
+                            write_row[col] = str(value)
+
+                    writer.writerow(write_row)
+
+        except PermissionError:
+            raise PermissionError(f"Permission denied writing to file: {path}")
+        except Exception as e:
+            raise ValueError(f"Error writing CSV file {path}: {e}")
+
+    @classmethod
+    def from_parquet(
+        cls,
+        path: str | Path,
+        *,
+        columns: list[str] | None = None,
+        filters: list[tuple] | None = None,
+        use_nullable_dtypes: bool = True,
+    ) -> "Table":
+        """
+        Create a Table from a Parquet file.
+
+        Args:
+            path: Path to the Parquet file
+            columns: Specific columns to read (default: all)
+            filters: Row-level filters using PyArrow syntax
+                     e.g., [("age", ">", 18), ("city", "in", ["NYC", "LA"])]
+            use_nullable_dtypes: Use pandas nullable dtypes for better None handling
+
+        Returns:
+            New Table with Parquet data as rows
+
+        Examples:
+            >>> # Basic usage
+            >>> table = Table.from_parquet("data.parquet")
+
+            >>> # Read specific columns
+            >>> table = Table.from_parquet("data.parquet", columns=["id", "name", "score"])
+
+            >>> # Apply filters during read
+            >>> table = Table.from_parquet("data.parquet", filters=[
+            ...     ("year", ">=", 2020),
+            ...     ("status", "==", "active")
+            ... ])
+
+        Note: Requires pyarrow to be installed
+        """
+        pa, pq = cls._check_pyarrow()
+
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Parquet file not found: {path}")
+
+        try:
+            # Read parquet file
+            table = pq.read_table(
+                path,
+                columns=columns,
+                filters=filters,
+            )
+
+            # Convert to list of dicts using PyArrow directly
+            rows = []
+
+            # Convert PyArrow table to Python objects
+            for i in range(table.num_rows):
+                row_dict = {}
+                for j, column_name in enumerate(table.column_names):
+                    column = table.column(j)
+                    value = column[i].as_py()  # Convert to Python object
+                    row_dict[column_name] = value
+                rows.append(row_dict)
+
+            return cls(rows)
+
+        except PermissionError:
+            raise PermissionError(f"Permission denied reading file: {path}")
+        except Exception as e:
+            raise ValueError(f"Error reading Parquet file {path}: {e}")
+
+    def to_parquet(
+        self,
+        path: str | Path,
+        *,
+        compression: str = "snappy",
+        columns: list[str] | None = None,
+        index: bool = False,
+        partition_cols: list[str] | None = None,
+        schema: Any | None = None,
+    ) -> None:
+        """
+        Write the Table to a Parquet file.
+
+        Args:
+            path: Output file path or directory (if using partitions)
+            compression: Compression codec ("snappy", "gzip", "brotli", "lz4", "zstd", or None)
+            columns: Specific columns to write (default: all)
+            index: Whether to write row keys as a column
+            partition_cols: Columns to use for partitioning the dataset
+            schema: PyArrow schema for explicit type control
+
+        Examples:
+            >>> # Basic export
+            >>> table.to_parquet("output.parquet")
+
+            >>> # With compression and specific columns
+            >>> table.to_parquet("output.parquet",
+            ...                  compression="gzip",
+            ...                  columns=["id", "name", "metrics"])
+
+            >>> # Partitioned dataset
+            >>> table.to_parquet("output_dir/",
+            ...                  partition_cols=["year", "month"])
+
+        Note: Requires pyarrow to be installed
+        """
+        pa, pq = self._check_pyarrow()
+
+        path = Path(path)
+
+        # Prepare data for writing
+        write_data = []
+
+        for i, row in enumerate(self._rows):
+            write_row = {}
+
+            # Add index if requested
+            if index:
+                # Get the row key
+                row_key = None
+                for key, idx in self._row_keys.items():
+                    if idx == i:
+                        row_key = key
+                        break
+                write_row["_index"] = row_key or f"${i}"
+
+            # Add specified columns or all columns
+            if columns:
+                for col in columns:
+                    write_row[col] = row.get(col)  # type: ignore
+            else:
+                write_row.update(row)
+
+            write_data.append(write_row)
+
+        try:
+            # Convert to PyArrow table
+            if schema:
+                # Use provided schema
+                pa_table = pa.Table.from_pylist(write_data, schema=schema)
+            else:
+                # Auto-infer schema
+                pa_table = pa.Table.from_pylist(write_data)
+
+            # Write to parquet
+            if partition_cols:
+                # Partitioned dataset
+                pq.write_to_dataset(
+                    pa_table,
+                    root_path=path,
+                    partition_cols=partition_cols,
+                    compression=compression,
+                )
+            else:
+                # Single file
+                pq.write_table(
+                    pa_table,
+                    path,
+                    compression=compression,
+                )
+
+        except PermissionError:
+            raise PermissionError(f"Permission denied writing to file: {path}")
+        except Exception as e:
+            raise ValueError(f"Error writing Parquet file {path}: {e}")
+
+    @classmethod
+    def _check_pyarrow(cls):
+        """Check if pyarrow is available and return the modules."""
+        try:
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+
+            return pa, pq
+        except ImportError:
+            raise ImportError(
+                "Parquet support requires pyarrow. " "Install with: uv add pyarrow"
+            )

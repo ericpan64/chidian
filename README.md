@@ -66,9 +66,44 @@ See the [tests](/chidian/tests) for some use-cases.
 | **Mapper**       | Pure dict→dict runtime transformations – no schema required.                 |
 | **DataMapping**  | Adds Pydantic validation around a `Mapper` for safe, forward-only transforms. |
 | **Partials API** | `|` operator chains (`split | last | upper`) keep lambdas away.           |
-| **DictGroup**    | Lightweight collection class: `select`, `filter`, `to_json`, arrow export.   |
+| **Table**        | Lightweight sparse table: path queries, joins, pandas/polars interop.        |
 | **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |
 
+
+## Table: DataFrames interoperability
+
+The `Table` class provides seamless conversion to pandas and polars DataFrames via optional dependencies:
+
+### Installation
+
+```bash
+# For pandas support
+pip install 'chidian[pandas]'
+
+# For polars support
+pip install 'chidian[polars]'
+
+# For both
+pip install 'chidian[dfs]'
+```
+
+### Usage
+
+```python
+from chidian.table import Table
+
+# Create a table
+table = Table([
+    {"name": "Alice", "age": 30},
+    {"name": "Bob", "age": 25}
+])
+
+# Convert to pandas (with row keys as index)
+df_pd = table.to_pandas(index=True)        # pandas index from row keys
+
+# Convert to polars (with row keys as column)
+df_pl = table.to_polars(add_index=True)    # polars gets '_index' column
+```
 
 ## Powered by Pydantic
 
