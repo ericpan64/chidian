@@ -105,6 +105,41 @@ df_pd = table.to_pandas(index=True)        # pandas index from row keys
 df_pl = table.to_polars(add_index=True)    # polars gets '_index' column
 ```
 
+## Flattening nested data
+
+The `Table` class provides powerful flattening capabilities to convert nested dictionaries and lists into flat, column-based structures using intuitive path notation:
+
+```python
+from chidian.table import Table
+
+# Create table with nested data
+table = Table([
+    {"user": {"name": "John", "prefs": ["email", "sms"]}, "id": 123},
+    {"user": {"name": "Jane", "prefs": ["phone"]}, "id": 456}
+])
+
+# Flatten nested structures
+flat = table.flatten()
+print(flat.columns)
+# {'id', 'user.name', 'user.prefs[0]', 'user.prefs[1]'}
+
+# Direct export with flattening
+df = table.to_pandas(flatten=True)     # Flat pandas DataFrame
+df = table.to_polars(flatten=True)     # Flat polars DataFrame
+table.to_csv("flat.csv", flatten=True) # Flat CSV with path columns
+
+# Control flattening depth and array limits
+limited = table.flatten(max_depth=2, array_index_limit=5)
+```
+
+**Key features:**
+- **Intuitive paths**: `user.name`, `items[0]`, `data.settings.theme`
+- **Sparse-friendly**: Different nesting across rows creates union of all paths
+- **Special key handling**: Keys with dots/brackets use bracket notation: `["key.with.dots"]`
+- **Depth control**: Limit recursion to prevent over-flattening
+- **Array limits**: Cap array indices to manage large arrays
+- **Seamless integration**: All Table operations (join, select, group_by) work on flattened data
+
 ## Powered by Pydantic
 
 chidian treats **Pydantic v2 models as first‑class citizens**:

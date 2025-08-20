@@ -109,7 +109,7 @@ class Table:
 
             # If there's a remaining path, extract from the row
             if len(parts) > 1:
-                return get(row, parts[1], default=default)
+                return self._get_path_value(row, parts[1], default=default)
             else:
                 # Just the row key itself, return the whole row
                 return row
@@ -117,7 +117,7 @@ class Table:
         # Original behavior: extract from all rows
         results = []
         for row in self._rows:
-            value = get(row, path, default=default)
+            value = self._get_path_value(row, path, default=default)
             results.append(value)
         return results
 
@@ -268,7 +268,7 @@ class Table:
 
             for spec in parsed:
                 # Get value using path
-                value = get(row, spec.path, default=None)
+                value = self._get_path_value(row, spec.path, default=None)
 
                 # Use rename if specified, otherwise use the last segment of path
                 if spec.rename_to:
@@ -327,7 +327,7 @@ class Table:
         groups: dict[Any, list[dict[str, Any]]] = {}
 
         for row in self._rows:
-            group_value = get(row, path, default=None)
+            group_value = self._get_path_value(row, path, default=None)
             # Handle unhashable types by converting to string
             try:
                 hash(group_value)
@@ -538,10 +538,10 @@ class Table:
         lookup: dict[tuple, list[dict[str, Any]]] = {}
 
         for row in table._rows:
-            # Extract key values using get() to support paths
+            # Extract key values using path resolution to support paths
             key_values = []
             for key in keys:
-                value = get(row, key, default=None)
+                value = self._get_path_value(row, key, default=None)
                 # Convert unhashable types to strings for lookup
                 try:
                     hash(value)
@@ -608,7 +608,7 @@ class Table:
             # Extract key values from left row
             key_values = []
             for key in left_keys:
-                value = get(left_row, key, default=None)
+                value = self._get_path_value(left_row, key, default=None)
                 try:
                     hash(value)
                     key_values.append(value)
@@ -639,7 +639,7 @@ class Table:
             # Extract key values from left row
             key_values = []
             for key in left_keys:
-                value = get(left_row, key, default=None)
+                value = self._get_path_value(left_row, key, default=None)
                 try:
                     hash(value)
                     key_values.append(value)
@@ -674,7 +674,7 @@ class Table:
             # Extract key values from right row
             key_values = []
             for key in right_keys:
-                value = get(right_row, key, default=None)
+                value = self._get_path_value(right_row, key, default=None)
                 try:
                     hash(value)
                     key_values.append(value)
@@ -711,7 +711,7 @@ class Table:
             # Extract key values from left row
             key_values = []
             for key in left_keys:
-                value = get(left_row, key, default=None)
+                value = self._get_path_value(left_row, key, default=None)
                 try:
                     hash(value)
                     key_values.append(value)
@@ -860,7 +860,16 @@ class Table:
         """
         return self.show(n=5)
 
-    def show(self, n: int = 5, truncate: int = 50, max_col_width: int = 20) -> str:
+    def show(
+        self,
+        n: int = 5,
+        truncate: int = 50,
+        max_col_width: int = 20,
+        *,
+        flatten: bool = False,
+        max_depth: int | None = None,
+        array_index_limit: int | None = None,
+    ) -> str:
         """
         Return a formatted string representation of the Table.
 
@@ -868,6 +877,9 @@ class Table:
             n: Number of rows to display (default: 5)
             truncate: Maximum length for cell values before truncation (default: 50)
             max_col_width: Maximum column width for display (default: 20)
+            flatten: If True, flatten nested structures before display (default: False)
+            max_depth: Maximum recursion depth when flattening (None for unlimited)
+            array_index_limit: Maximum array indices when flattening (None for unlimited)
 
         Returns:
             Formatted string representation of the table
@@ -875,9 +887,23 @@ class Table:
         Examples:
             >>> t = Table([{"name": "John", "age": 30}, {"name": "Jane", "age": 25}])
             >>> print(t.show(n=10))  # Show up to 10 rows
+
+            >>> # Show flattened view
+            >>> nested = Table([{"user": {"name": "John", "prefs": ["email", "sms"]}}])
+            >>> print(nested.show(flatten=True))
+            # Shows columns: user.name, user.prefs[0], user.prefs[1]
         """
         if len(self._rows) == 0:
             return "<Empty Table>"
+
+        # Apply flattening if requested
+        if flatten:
+            flattened_table = self.flatten(
+                max_depth=max_depth, array_index_limit=array_index_limit
+            )
+            return flattened_table.show(
+                n=n, truncate=truncate, max_col_width=max_col_width
+            )
 
         # Get the rows to display
         display_rows = self._rows[:n]
@@ -986,7 +1012,13 @@ class Table:
             return str_value
 
     def to_pandas(
-        self, *, index: bool = False, index_name: str = "_index"
+        self,
+        *,
+        index: bool = False,
+        index_name: str = "_index",
+        flatten: bool = False,
+        max_depth: int | None = None,
+        array_index_limit: int | None = None,
     ) -> "pd.DataFrame":
         """
         Convert Table to pandas DataFrame.
@@ -994,6 +1026,9 @@ class Table:
         Args:
             index: If True, use row keys ($0, $1, etc.) as DataFrame index
             index_name: Name for the index column when index=True
+            flatten: If True, flatten nested structures before conversion (default: False)
+            max_depth: Maximum recursion depth when flattening (None for unlimited)
+            array_index_limit: Maximum array indices when flattening (None for unlimited)
 
         Returns:
             pandas.DataFrame with Table data
@@ -1008,6 +1043,11 @@ class Table:
             >>> # Custom index name
             >>> df = table.to_pandas(index=True, index_name="row_id")
 
+            >>> # Flatten nested structures
+            >>> nested = Table([{"user": {"name": "John", "prefs": ["email"]}}])
+            >>> df = nested.to_pandas(flatten=True)
+            # Results in columns: user.name, user.prefs[0]
+
         Note: Requires pandas to be installed: pip install 'chidian[pandas]'
         """
         try:
@@ -1016,6 +1056,13 @@ class Table:
             raise ModuleNotFoundError(
                 "pandas not installed. pip install 'chidian[pandas]'"
             ) from e
+
+        # Apply flattening if requested
+        if flatten:
+            flattened_table = self.flatten(
+                max_depth=max_depth, array_index_limit=array_index_limit
+            )
+            return flattened_table.to_pandas(index=index, index_name=index_name)
 
         if not index:
             return pd.DataFrame(self.to_list())
@@ -1030,7 +1077,13 @@ class Table:
         return pd.DataFrame(rows).set_index(index_name)
 
     def to_polars(
-        self, *, add_index: bool = False, index_name: str = "_index"
+        self,
+        *,
+        add_index: bool = False,
+        index_name: str = "_index",
+        flatten: bool = False,
+        max_depth: int | None = None,
+        array_index_limit: int | None = None,
     ) -> "pl.DataFrame":
         """
         Convert Table to polars DataFrame.
@@ -1038,6 +1091,9 @@ class Table:
         Args:
             add_index: If True, add row keys ($0, $1, etc.) as a column
             index_name: Name for the index column when add_index=True
+            flatten: If True, flatten nested structures before conversion (default: False)
+            max_depth: Maximum recursion depth when flattening (None for unlimited)
+            array_index_limit: Maximum array indices when flattening (None for unlimited)
 
         Returns:
             polars.DataFrame with Table data
@@ -1052,6 +1108,11 @@ class Table:
             >>> # Custom index column name
             >>> df = table.to_polars(add_index=True, index_name="row_id")
 
+            >>> # Flatten nested structures
+            >>> nested = Table([{"user": {"name": "John", "prefs": ["email"]}}])
+            >>> df = nested.to_polars(flatten=True)
+            # Results in columns: user.name, user.prefs[0]
+
         Note: Requires polars to be installed: pip install 'chidian[polars]'
         """
         try:
@@ -1060,6 +1121,13 @@ class Table:
             raise ModuleNotFoundError(
                 "polars not installed. pip install 'chidian[polars]'"
             ) from e
+
+        # Apply flattening if requested
+        if flatten:
+            flattened_table = self.flatten(
+                max_depth=max_depth, array_index_limit=array_index_limit
+            )
+            return flattened_table.to_polars(add_index=add_index, index_name=index_name)
 
         if len(self._rows) == 0:
             # Handle empty table case - polars needs schema for empty data
@@ -1076,6 +1144,219 @@ class Table:
             for k, row in self.to_dict().items()
         ]
         return pl.from_dicts(rows)
+
+    def flatten(
+        self, *, max_depth: int | None = None, array_index_limit: int | None = None
+    ) -> "Table":
+        """
+        Return a new Table with nested data structures flattened into path-keyed columns.
+
+        Converts nested dictionaries and lists into a flat structure using dot-notation
+        for dictionaries (e.g., 'a.b') and bracket-notation for arrays (e.g., 'a[0]').
+
+        Args:
+            max_depth: Maximum recursion depth (None for unlimited). When reached,
+                      sub-structures are preserved as values.
+            array_index_limit: Maximum array indices to process per array (None for unlimited).
+                              Helps prevent explosion with very large arrays.
+
+        Returns:
+            New Table with flattened structure
+
+        Examples:
+            >>> # Basic flattening
+            >>> t = Table([{'a': 1, 'b': [2, 3], 'c': {'d': 4}}])
+            >>> flat = t.flatten()
+            >>> list(flat.columns)
+            ['a', 'b[0]', 'b[1]', 'c.d']
+
+            >>> # With depth limit
+            >>> deep = Table([{'a': {'b': {'c': {'d': 1}}}}])
+            >>> limited = deep.flatten(max_depth=2)
+            >>> list(limited.columns)  # 'a.b' contains {'c': {'d': 1}}
+            ['a.b']
+
+            >>> # With array limit
+            >>> big_array = Table([{'items': list(range(100))}])
+            >>> limited = big_array.flatten(array_index_limit=3)
+            >>> sorted(limited.columns)  # Only items[0], items[1], items[2]
+            ['items[0]', 'items[1]', 'items[2]']
+        """
+        flattened_rows = [
+            self._flatten_row(
+                row, max_depth=max_depth, array_index_limit=array_index_limit
+            )
+            for row in self._rows
+        ]
+        return Table(flattened_rows)
+
+    def columns_flattened(
+        self,
+        *,
+        sample_rows: int | None = None,
+        max_depth: int | None = None,
+        array_index_limit: int | None = None,
+    ) -> set[str]:
+        """
+        Return the union of all flattened column names without modifying the table.
+
+        Useful for previewing the column structure that would result from flattening,
+        especially on large tables where you want to limit analysis to a sample.
+
+        Args:
+            sample_rows: If provided, only analyze this many rows (from the beginning)
+            max_depth: Maximum recursion depth (None for unlimited)
+            array_index_limit: Maximum array indices to process per array (None for unlimited)
+
+        Returns:
+            Set of flattened column names
+
+        Examples:
+            >>> t = Table([
+            ...     {'a': 1, 'b': [1, 2]},
+            ...     {'a': 2, 'b': [3], 'c': {'d': 4}}
+            ... ])
+            >>> t.columns_flattened()
+            {'a', 'b[0]', 'b[1]', 'c.d'}
+
+            >>> # Sample just first row
+            >>> t.columns_flattened(sample_rows=1)
+            {'a', 'b[0]', 'b[1]'}
+        """
+        rows_to_analyze = (
+            self._rows[:sample_rows] if sample_rows is not None else self._rows
+        )
+
+        all_columns: set[str] = set()
+        for row in rows_to_analyze:
+            flattened = self._flatten_row(
+                row, max_depth=max_depth, array_index_limit=array_index_limit
+            )
+            all_columns.update(flattened.keys())
+
+        return all_columns
+
+    def _get_path_value(
+        self, row: dict[str, Any], path: str, default: Any = None
+    ) -> Any:
+        """
+        Enhanced path value extraction that works with both regular and flattened tables.
+
+        First tries standard chidian.core.get() for path resolution. If that returns the
+        default value and the path looks like it could be a flattened key, tries direct
+        dictionary lookup as a fallback.
+
+        Args:
+            row: Row dictionary to extract from
+            path: Path string (e.g., "a.b", "items[0]", or flattened key like "c.d")
+            default: Default value if path not found
+
+        Returns:
+            Value at path or default if not found
+        """
+        # First try standard path resolution
+        result = get(row, path, default=default)
+
+        # If we got the default and the path contains path syntax,
+        # check if it's a direct key in a flattened table
+        if (
+            result is default
+            and any(char in path for char in [".", "[", "]"])
+            and path in row
+        ):
+            return row[path]
+
+        return result
+
+    def _encode_key_for_path_segment(self, key: str) -> str:
+        """
+        Encode a key for use in flattened path notation.
+
+        Simple keys (alphanumeric + underscore) use plain notation.
+        Complex keys use bracket-quoted notation with proper escaping.
+
+        Args:
+            key: The dictionary key to encode
+
+        Returns:
+            Encoded key suitable for path notation
+        """
+        # Check if key contains only safe characters
+        if key.replace("_", "").replace("-", "").isalnum() and key[0].isalpha():
+            return key
+
+        # Need to use bracket notation - escape quotes and backslashes
+        escaped = key.replace("\\", "\\\\").replace('"', '\\"')
+        return f'["{escaped}"]'
+
+    def _flatten_value(
+        self,
+        value: Any,
+        prefix: str,
+        out: dict[str, Any],
+        max_depth: int | None,
+        array_index_limit: int | None,
+        depth: int,
+    ) -> None:
+        """
+        Recursively flatten a value into path-keyed entries.
+
+        Args:
+            value: Value to flatten
+            prefix: Current path prefix
+            out: Output dictionary to populate
+            max_depth: Maximum recursion depth (None for unlimited)
+            array_index_limit: Maximum array indices to process (None for unlimited)
+            depth: Current recursion depth
+        """
+        # Check depth limit
+        if max_depth is not None and depth >= max_depth:
+            out[prefix] = value
+            return
+
+        if isinstance(value, dict):
+            # Flatten dictionary
+            for k, v in value.items():
+                encoded_key = self._encode_key_for_path_segment(k)
+                new_prefix = f"{prefix}.{encoded_key}" if prefix else encoded_key
+                self._flatten_value(
+                    v, new_prefix, out, max_depth, array_index_limit, depth + 1
+                )
+        elif isinstance(value, list):
+            # Flatten list with index notation
+            for i, v in enumerate(value):
+                if array_index_limit is not None and i >= array_index_limit:
+                    break
+                new_prefix = f"{prefix}[{i}]"
+                self._flatten_value(
+                    v, new_prefix, out, max_depth, array_index_limit, depth + 1
+                )
+        else:
+            # Leaf value - store as-is
+            out[prefix] = value
+
+    def _flatten_row(
+        self,
+        row: dict[str, Any],
+        max_depth: int | None = None,
+        array_index_limit: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Flatten a single row's nested structure into path-keyed columns.
+
+        Args:
+            row: Row dictionary to flatten
+            max_depth: Maximum recursion depth (None for unlimited)
+            array_index_limit: Maximum array indices to process (None for unlimited)
+
+        Returns:
+            Flattened row dictionary
+        """
+        out: dict[str, Any] = {}
+        for k, v in row.items():
+            encoded_key = self._encode_key_for_path_segment(k)
+            self._flatten_value(v, encoded_key, out, max_depth, array_index_limit, 0)
+        return out
 
     @classmethod
     def from_csv(
@@ -1345,6 +1626,9 @@ class Table:
         float_format: str | None = None,
         date_format: str | None = None,
         mode: str = "w",
+        flatten: bool = False,
+        max_depth: int | None = None,
+        array_index_limit: int | None = None,
     ) -> None:
         """
         Write the Table to a CSV file.
@@ -1360,6 +1644,9 @@ class Table:
             float_format: Format string for floating point numbers (e.g., "%.2f")
             date_format: Format string for datetime objects (e.g., "%Y-%m-%d")
             mode: File write mode ("w" for overwrite, "a" for append)
+            flatten: If True, flatten nested structures before export (default: False)
+            max_depth: Maximum recursion depth when flattening (None for unlimited)
+            array_index_limit: Maximum array indices when flattening (None for unlimited)
 
         Examples:
             >>> # Basic export
@@ -1373,7 +1660,30 @@ class Table:
 
             >>> # Append to existing file
             >>> table.to_csv("output.csv", mode="a", header=False)
+
+            >>> # Export with flattened structure
+            >>> nested = Table([{"user": {"name": "John", "prefs": ["email"]}}])
+            >>> nested.to_csv("flat.csv", flatten=True)
+            # Results in columns: user.name, user.prefs[0]
         """
+        # Apply flattening if requested
+        if flatten:
+            flattened_table = self.flatten(
+                max_depth=max_depth, array_index_limit=array_index_limit
+            )
+            return flattened_table.to_csv(
+                path,
+                delimiter=delimiter,
+                encoding=encoding,
+                header=header,
+                columns=columns,
+                index=index,
+                null_value=null_value,
+                float_format=float_format,
+                date_format=date_format,
+                mode=mode,
+            )
+
         path = Path(path)
 
         # Determine columns to write
