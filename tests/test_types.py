@@ -68,7 +68,9 @@ class TestSeedsWithDataMapping:
         }
 
         data_mapping = DataMapping(
-            transformations=mapping, input_schema=SourceData, output_schema=SimpleTarget
+            transformations=mapping,
+            min_input_schemas=[SourceData],
+            output_schema=SimpleTarget,
         )
         mapper = Mapper(data_mapping)
         result = mapper(SourceData.model_validate(simple_data))
@@ -94,7 +96,7 @@ class TestSeedsWithDataMapping:
 
         data_mapping = DataMapping(
             transformations=mapping,
-            input_schema=SourceData,
+            min_input_schemas=[SourceData],
             output_schema=KeepTestTarget,
         )
         mapper = Mapper(data_mapping)
@@ -162,7 +164,7 @@ class TestSeedsWithDataMapping:
 
         data_mapping = DataMapping(
             transformations=mapping,
-            input_schema=ComplexPersonData,
+            min_input_schemas=[ComplexPersonData],
             output_schema=FlatPersonData,
         )
         mapper = Mapper(data_mapping)

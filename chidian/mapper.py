@@ -1,8 +1,19 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, List, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Generic,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+)
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
+
+if TYPE_CHECKING:
+    from .data_mapping import DataMapping
 
 """
 Mapper class - execution engine for DataMapping with validation strategies.
@@ -14,6 +25,9 @@ The Mapper class takes a DataMapping and executes it with different validation m
 
 Also contains special types for transformation control (DROP, KEEP).
 """
+
+# Define generic type variable for output models
+_OutT = TypeVar("_OutT", bound=BaseModel)
 
 
 class ValidationMode(Enum):
@@ -34,11 +48,15 @@ class ValidationIssue:
     value: Any
 
 
-class MapperResult:
+class MapperResult(Generic[_OutT]):
     """Result of a mapping operation, potentially with validation issues."""
 
-    def __init__(self, data: Any, issues: Optional[List[ValidationIssue]] = None):
-        self.data = data
+    def __init__(
+        self,
+        data: _OutT | dict[str, Any] | Any,
+        issues: Optional[List[ValidationIssue]] = None,
+    ):
+        self.data: _OutT | dict[str, Any] | Any = data
         self.issues = issues or []
 
     @property
@@ -52,14 +70,16 @@ class MapperResult:
             raise ValidationError(f"Validation issues: {'; '.join(messages)}")
 
 
-class Mapper:
+class Mapper(Generic[_OutT]):
     """
     Execution engine for DataMapping with validation strategies.
     """
 
     def __init__(
         self,
-        data_mapping_or_dict,  # DataMapping or dict for backward compatibility
+        data_mapping_or_dict: Union[
+            "DataMapping[_OutT]", dict[str, Any]
+        ],  # DataMapping or dict for backward compatibility
         mode: ValidationMode = ValidationMode.AUTO,
         collect_all_errors: bool = True,
     ):
@@ -76,7 +96,9 @@ class Mapper:
 
         # Backward compatibility: if dict is passed, create a DataMapping
         if isinstance(data_mapping_or_dict, dict):
-            self.data_mapping = DataMapping(transformations=data_mapping_or_dict)
+            self.data_mapping: DataMapping[Any] = DataMapping(
+                transformations=data_mapping_or_dict
+            )
             self._backward_compat = True
         elif isinstance(data_mapping_or_dict, DataMapping):
             self.data_mapping = data_mapping_or_dict
@@ -98,7 +120,7 @@ class Mapper:
         else:
             self.mode = mode
 
-    def __call__(self, data: Any) -> Any | MapperResult:
+    def __call__(self, data: Any) -> _OutT | MapperResult[_OutT] | Any:
         """
         Execute the mapping with the configured validation mode.
 
@@ -119,14 +141,10 @@ class Mapper:
     def _execute_strict(self, data: Any) -> Any:
         """Execute with strict validation - raise on any errors."""
         # Import helpers here to avoid circular dependency
-        from .lib.data_mapping_helpers import to_dict, validate_input, validate_output
+        from .lib.data_mapping_helpers import to_dict, validate_output
 
-        # Validate input if schema provided
-        if self.data_mapping.input_schema:
-            validated_input = validate_input(data, self.data_mapping.input_schema)
-            input_dict = to_dict(validated_input)
-        else:
-            input_dict = to_dict(data) if hasattr(data, "model_dump") else data
+        # Convert input to dict if needed (no validation)
+        input_dict = to_dict(data) if hasattr(data, "model_dump") else data
 
         # Apply transformation
         output_dict = self.data_mapping.transform(input_dict)
@@ -139,31 +157,12 @@ class Mapper:
     def _execute_flexible(self, data: Any) -> MapperResult:
         """Execute with flexible validation - collect errors but continue."""
         # Import helpers here to avoid circular dependency
-        from .lib.data_mapping_helpers import to_dict, validate_input, validate_output
+        from .lib.data_mapping_helpers import to_dict, validate_output
 
         issues = []
 
-        # Try to validate input
-        input_dict = None
-        if self.data_mapping.input_schema:
-            try:
-                validated_input = validate_input(data, self.data_mapping.input_schema)
-                input_dict = to_dict(validated_input)
-            except ValidationError as e:
-                # Collect input validation errors
-                for error in e.errors():
-                    issues.append(
-                        ValidationIssue(
-                            stage="input",
-                            field=".".join(str(loc) for loc in error["loc"]),
-                            error=error["msg"],
-                            value=error.get("input"),
-                        )
-                    )
-                # Continue with raw data
-                input_dict = to_dict(data) if hasattr(data, "model_dump") else data
-        else:
-            input_dict = to_dict(data) if hasattr(data, "model_dump") else data
+        # Convert input to dict if needed (no validation)
+        input_dict = to_dict(data) if hasattr(data, "model_dump") else data
 
         # Apply transformation (might fail if input validation failed)
         try:

@@ -18,7 +18,7 @@ class TestMapperBasic:
             "patient_id": p.get("data.patient.id"),
             "is_active": p.get("data.patient.active"),
         }
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         input_data = {
             "data": {"patient": {"id": "abc123", "active": True}, "other": "value"}
@@ -38,7 +38,7 @@ class TestMapperBasic:
             "status": lambda data: "processed",
         }
 
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         input_data = {
             "data": {"patient": {"id": "abc123", "active": True}, "other": "value"}
@@ -86,7 +86,7 @@ class TestMapperBasic:
             "backup_name": backup_name_transform,
         }
 
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         input_data = {
             "firstName": "John",
@@ -127,7 +127,7 @@ class TestMapperMapping:
             "transformed": lambda data: data.get("value", "").upper(),
             "partial": p.get("nested.value") | p.upper,
         }
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         input_data = {
             "path": {"to": {"value": "hello"}},
@@ -148,14 +148,14 @@ class TestMapperMapping:
             raise ValueError("Test error")
 
         mapping: dict[str, Any] = {"result": failing_mapper}
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         with pytest.raises(ValueError, match="Test error"):
             mapper({"test": "data"})
 
     def test_mapper_with_empty_mapping(self) -> None:
         """Test Mapper with empty mapping."""
-        mapper = Mapper({})
+        mapper: Mapper[Any] = Mapper({})
         result = mapper({"input": "data"})
         assert result == {}
 
@@ -168,7 +168,7 @@ class TestMapperMapping:
             "constant_none": None,
             "dynamic_value": p.get("input.value"),
         }
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         input_data = {"input": {"value": "dynamic"}, "ignored": "data"}
         result = mapper(input_data)
@@ -192,7 +192,7 @@ class TestMapperMapping:
             "nested": nested_transform,
         }
 
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         input_data = {"simple": {"value": "test"}, "another": {"path": "nested_test"}}
 
@@ -209,7 +209,7 @@ class TestMapperCalling:
     def test_mapper_callable_interface(self) -> None:
         """Test that Mapper can be called directly."""
         mapping = {"output": p.get("input")}
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         input_data = {"input": "test_value"}
         result = mapper(input_data)
@@ -219,7 +219,7 @@ class TestMapperCalling:
     def test_mapper_callable_only(self) -> None:
         """Test that Mapper only has __call__ method (no forward method)."""
         mapping = {"output": p.get("input")}
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         input_data = {"input": "test_value"}
 
@@ -233,7 +233,7 @@ class TestMapperCalling:
     def test_mapper_no_reverse(self) -> None:
         """Test that Mapper doesn't support reverse operations."""
         mapping = {"output": p.get("input")}
-        mapper = Mapper(mapping)
+        mapper: Mapper[Any] = Mapper(mapping)
 
         # Should not have reverse method
         assert not hasattr(mapper, "reverse")
@@ -248,7 +248,7 @@ class TestMapperWithDataMapping:
     def test_mapper_backward_compatibility(self) -> None:
         """Test that Mapper maintains backward compatibility with dict."""
         # Old-style dict mapping should still work
-        mapper = Mapper({"output": p.get("input")})
+        mapper: Mapper[Any] = Mapper({"output": p.get("input")})
         result = mapper({"input": "test"})
         assert result == {"output": "test"}
 
@@ -263,16 +263,19 @@ class TestMapperWithDataMapping:
             display_name: str
             age_group: str
 
-        data_mapping = DataMapping(
-            transformations={
-                "display_name": p.get("name") | p.upper,
-                "age_group": lambda d: "adult" if d.get("age", 0) >= 18 else "child",
-            },
-            input_schema=InputModel,
-            output_schema=OutputModel,
+        mapper = Mapper(
+            DataMapping(
+                transformations={
+                    "display_name": p.get("name") | p.upper,
+                    "age_group": lambda d: "adult"
+                    if d.get("age", 0) >= 18
+                    else "child",
+                },
+                min_input_schemas=[InputModel],
+                output_schema=OutputModel,
+            ),
+            mode=ValidationMode.STRICT,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
 
         # Valid input
         result = mapper({"name": "John", "age": 25})
@@ -280,9 +283,11 @@ class TestMapperWithDataMapping:
         assert result.display_name == "JOHN"
         assert result.age_group == "adult"
 
-        # Invalid input should raise
-        with pytest.raises(Exception):
-            mapper({"name": "John"})  # Missing age
+        # Invalid input no longer raises (input validation removed)
+        # but output validation will fail due to missing field transformation
+        result2 = mapper({"name": "John", "age": 10})
+        assert isinstance(result2, OutputModel)
+        assert result2.age_group == "child"
 
     def test_mapper_with_data_mapping_flexible(self) -> None:
         """Test Mapper with DataMapping in flexible mode."""
@@ -300,7 +305,7 @@ class TestMapperWithDataMapping:
                 "display_name": p.get("name") | p.upper,
                 "age_group": lambda d: "adult" if d.get("age", 0) >= 18 else "child",
             },
-            input_schema=InputModel,
+            min_input_schemas=[InputModel],
             output_schema=OutputModel,
         )
 
@@ -310,33 +315,38 @@ class TestMapperWithDataMapping:
         result = mapper({"name": "John", "age": 25})
         assert isinstance(result, MapperResult)
         assert not result.has_issues
+        assert isinstance(result.data, OutputModel)
         assert result.data.display_name == "JOHN"
 
-        # Invalid input should return issues
+        # Invalid input no longer causes input validation issues
+        # but missing transformation data causes output issues
         result = mapper({"name": "John"})  # Missing age
         assert isinstance(result, MapperResult)
-        assert result.has_issues
-        assert any(issue.field == "age" for issue in result.issues)
+        # Since age is missing, age_group becomes "child" (default 0 < 18)
+        assert isinstance(result.data, OutputModel)
+        assert result.data.age_group == "child"
 
     def test_mapper_auto_mode(self) -> None:
         """Test Mapper auto mode selection."""
         # With schemas -> strict
-        data_mapping_with_schemas = DataMapping(
+        data_mapping_with_schemas: DataMapping[BaseModel] = DataMapping(
             transformations={"out": p.get("in")},
-            input_schema=BaseModel,
+            min_input_schemas=[BaseModel],
             output_schema=BaseModel,
         )
         mapper = Mapper(data_mapping_with_schemas)
         assert mapper.mode == ValidationMode.STRICT
 
         # Without schemas -> flexible
-        data_mapping_no_schemas = DataMapping(transformations={"out": p.get("in")})
+        data_mapping_no_schemas: DataMapping[Any] = DataMapping(
+            transformations={"out": p.get("in")}
+        )
         mapper = Mapper(data_mapping_no_schemas)
         assert mapper.mode == ValidationMode.FLEXIBLE
 
     def test_mapper_with_pure_data_mapping(self) -> None:
         """Test Mapper with DataMapping without schemas."""
-        data_mapping = DataMapping(
+        data_mapping: DataMapping[Any] = DataMapping(
             transformations={
                 "id": p.get("patient.id"),
                 "name": p.get("patient.name"),

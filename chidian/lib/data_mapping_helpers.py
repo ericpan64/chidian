@@ -11,18 +11,6 @@ _InModel = TypeVar("_InModel", bound=BaseModel)
 _OutModel = TypeVar("_OutModel", bound=BaseModel)
 
 
-def validate_schemas(input_schema: Type, output_schema: Type) -> None:
-    """Validate that schemas are Pydantic BaseModel classes."""
-    if not is_pydantic_model(input_schema):
-        raise TypeError(
-            f"input_schema must be a Pydantic BaseModel, got {type(input_schema)}"
-        )
-    if not is_pydantic_model(output_schema):
-        raise TypeError(
-            f"output_schema must be a Pydantic BaseModel, got {type(output_schema)}"
-        )
-
-
 def is_pydantic_model(model_class: Type) -> bool:
     """Check if a class is a Pydantic BaseModel."""
     try:
@@ -33,19 +21,6 @@ def is_pydantic_model(model_class: Type) -> bool:
         )
     except TypeError:
         return False
-
-
-def validate_input(data: Any, input_schema: Type[_InModel]) -> _InModel:
-    """Validate input data against input schema."""
-    if isinstance(data, input_schema):
-        return data  # type: ignore[return-value]
-
-    # Try to convert dict to model
-    if isinstance(data, dict):
-        return input_schema.model_validate(data)  # type: ignore[return-value]
-
-    # Try direct validation
-    return input_schema.model_validate(data)  # type: ignore[return-value]
 
 
 def to_dict(model: _InModel) -> dict[str, Any]:
