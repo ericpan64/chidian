@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 import chidian.partials as p
-from chidian import DataMapping, Mapper, MapperResult, ValidationMode
+from chidian import Mapper, MapperResult, ValidationMode
 
 
 # Test models
@@ -29,18 +29,16 @@ class TestDataMappingBasic:
 
     def test_simple_mapping_with_mapper(self) -> None:
         """Test DataMapping with Mapper for basic field mapping."""
-        # Create a DataMapping for transformation
-        data_mapping = DataMapping(
+        # Create a Mapper for transformation
+        mapper = Mapper(
             transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             },
             min_input_schemas=[Patient],
             output_schema=Observation,
+            mode=ValidationMode.STRICT,
         )
-
-        # Create Mapper with DataMapping
-        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
 
         patient = Patient(id="123", name="John", active=True)
         obs = mapper(patient)
@@ -51,7 +49,7 @@ class TestDataMappingBasic:
 
     def test_complex_mapping_with_callable_mapper(self) -> None:
         """Test DataMapping with callable transformations."""
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations={
                 "subject_ref": lambda data: f"Patient/{data['id']}",
                 "performer": lambda data: data["name"].upper(),
@@ -59,9 +57,8 @@ class TestDataMappingBasic:
             },
             min_input_schemas=[Patient],
             output_schema=Observation,
+            mode=ValidationMode.STRICT,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
 
         patient = Patient(id="123", name="john", active=True)
         obs = mapper(patient)
@@ -73,24 +70,31 @@ class TestDataMappingBasic:
 
     def test_validation_modes(self) -> None:
         """Test different validation modes."""
-        data_mapping = DataMapping(
+        # Test strict mode
+        strict_mapper = Mapper(
             transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             },
             min_input_schemas=[Patient],
             output_schema=Observation,
+            mode=ValidationMode.STRICT,
         )
-
-        # Test strict mode
-        strict_mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
         patient = Patient(id="123", name="John", active=True)
         obs = strict_mapper(patient)
         assert isinstance(obs, Observation)
         assert obs.subject_ref == "123"
 
         # Test flexible mode
-        flexible_mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
+        flexible_mapper = Mapper(
+            transformations={
+                "subject_ref": p.get("id"),
+                "performer": p.get("name"),
+            },
+            min_input_schemas=[Patient],
+            output_schema=Observation,
+            mode=ValidationMode.FLEXIBLE,
+        )
         result = flexible_mapper(patient)
         assert isinstance(result, MapperResult)
         assert not result.has_issues
@@ -103,16 +107,15 @@ class TestDataMappingValidation:
 
     def test_no_input_validation(self) -> None:
         """Test that Mapper no longer validates input (min_input_schemas is metadata-only)."""
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             },
             min_input_schemas=[Patient],
             output_schema=Observation,
+            mode=ValidationMode.STRICT,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
 
         # Valid input works
         patient = Patient(id="123", name="John", active=True)
@@ -127,16 +130,15 @@ class TestDataMappingValidation:
 
     def test_output_validation(self) -> None:
         """Test that Mapper validates output against output schema."""
-        # DataMapping that produces invalid output
-        data_mapping = DataMapping(
+        # Mapper that produces invalid output
+        mapper = Mapper(
             transformations={
                 "invalid_field": lambda data: "value",  # Missing required fields
             },
             min_input_schemas=[Patient],
             output_schema=Observation,
+            mode=ValidationMode.STRICT,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
         patient = Patient(id="123", name="John", active=True)
 
         # Should raise ValidationError due to invalid output in strict mode
@@ -145,16 +147,15 @@ class TestDataMappingValidation:
 
     def test_flexible_mode_validation(self) -> None:
         """Test flexible mode collects validation errors."""
-        # DataMapping that produces invalid output
-        data_mapping = DataMapping(
+        # Mapper that produces invalid output
+        mapper = Mapper(
             transformations={
                 "invalid_field": lambda data: "value",  # Missing required fields
             },
             min_input_schemas=[Patient],
             output_schema=Observation,
+            mode=ValidationMode.FLEXIBLE,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
         patient = Patient(id="123", name="John", active=True)
 
         # Should return MapperResult with issues
@@ -166,16 +167,15 @@ class TestDataMappingValidation:
 
     def test_dict_input_with_strict_mode(self) -> None:
         """Test handling of dict input in strict mode."""
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             },
             min_input_schemas=[Patient],
             output_schema=Observation,
+            mode=ValidationMode.STRICT,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
 
         # Dict input should be validated and converted
         dict_input = {"id": "123", "name": "John", "active": True}
@@ -187,28 +187,24 @@ class TestDataMappingValidation:
     def test_auto_mode(self) -> None:
         """Test auto mode behavior."""
         # With output schema - should use strict mode
-        data_mapping_with_schemas = DataMapping(
+        mapper_with_schemas = Mapper(
             transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             },
             min_input_schemas=[Patient],
             output_schema=Observation,
-        )
-
-        mapper = Mapper(data_mapping_with_schemas)  # AUTO mode by default
-        assert mapper.mode == ValidationMode.STRICT
+        )  # AUTO mode by default
+        assert mapper_with_schemas.mode == ValidationMode.STRICT
 
         # Without schemas - should use flexible mode
-        data_mapping_no_schemas: DataMapping[Any] = DataMapping(
+        mapper_no_schemas: Mapper[Any] = Mapper(
             transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
             }
-        )
-
-        mapper2 = Mapper(data_mapping_no_schemas)  # AUTO mode by default
-        assert mapper2.mode == ValidationMode.FLEXIBLE
+        )  # AUTO mode by default
+        assert mapper_no_schemas.mode == ValidationMode.FLEXIBLE
 
 
 class TestDataMappingWithoutSchemas:
@@ -216,7 +212,7 @@ class TestDataMappingWithoutSchemas:
 
     def test_pure_transformation(self) -> None:
         """Test DataMapping as pure transformation without schemas."""
-        data_mapping: DataMapping[Any] = DataMapping(
+        mapper: Mapper[Any] = Mapper(
             transformations={
                 "subject_ref": p.get("id"),
                 "performer": p.get("name"),
@@ -224,39 +220,38 @@ class TestDataMappingWithoutSchemas:
         )
 
         # Direct transformation
-        result = data_mapping.transform({"id": "123", "name": "John"})
+        result = mapper.transform({"id": "123", "name": "John"})
         assert result["subject_ref"] == "123"
         assert result["performer"] == "John"
 
     def test_with_flexible_mapper(self) -> None:
         """Test DataMapping without schemas using flexible Mapper."""
-        data_mapping: DataMapping[Any] = DataMapping(
+        mapper: Mapper[Any] = Mapper(
             transformations={
                 "subject_ref": lambda data: f"Patient/{data.get('id', 'unknown')}",
                 "performer": lambda data: data.get("name", "Unknown"),
                 "status": lambda data: "processed",
-            }
+            },
+            mode=ValidationMode.FLEXIBLE,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
 
         # Should work with incomplete data
         result = mapper({"id": "123"})
-        assert isinstance(result, MapperResult)
-        assert result.data["subject_ref"] == "Patient/123"
-        assert result.data["performer"] == "Unknown"
-        assert result.data["status"] == "processed"
+        # Without schemas, returns dict directly
+        assert isinstance(result, dict)
+        assert result["subject_ref"] == "Patient/123"
+        assert result["performer"] == "Unknown"
+        assert result["status"] == "processed"
 
     def test_mapper_result_interface(self) -> None:
         """Test MapperResult interface."""
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations={
                 "missing_field": p.get("nonexistent"),
             },
             output_schema=Observation,
+            mode=ValidationMode.FLEXIBLE,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
         result = mapper({"id": "123"})
 
         assert isinstance(result, MapperResult)
@@ -278,7 +273,7 @@ class TestManyToOneMapping:
             status: str
             period_start: str
 
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations={
                 "subject_ref": lambda data: f"Patient/{data.get('patient_id', 'unknown')}",
                 "encounter_ref": lambda data: f"Encounter/{data.get('encounter_id', 'unknown')}",
@@ -289,8 +284,8 @@ class TestManyToOneMapping:
         )
 
         # Verify metadata is stored
-        assert data_mapping.min_input_schemas == [Patient, Encounter]
-        assert len(data_mapping.min_input_schemas) == 2
+        assert mapper.min_input_schemas == [Patient, Encounter]
+        assert len(mapper.min_input_schemas) == 2
 
     def test_other_input_schemas_metadata(self) -> None:
         """Test that other_input_schemas is stored as metadata."""
@@ -303,7 +298,7 @@ class TestManyToOneMapping:
             id: str
             name: str
 
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations={
                 "subject_ref": p.get("patient_id"),
                 "performer": p.get("practitioner_name"),
@@ -315,9 +310,10 @@ class TestManyToOneMapping:
         )
 
         # Verify metadata is stored
-        assert data_mapping.min_input_schemas == [Patient]
-        assert data_mapping.other_input_schemas == [Encounter, Practitioner]
-        assert len(data_mapping.other_input_schemas) == 2
+        assert mapper.min_input_schemas == [Patient]
+        # Type: ignore for mypy - local classes are BaseModel subclasses
+        assert mapper.other_input_schemas == [Encounter, Practitioner]  # type: ignore[list-item]
+        assert len(mapper.other_input_schemas) == 2
 
     def test_metadata_not_enforced_at_runtime(self) -> None:
         """Test that input schemas are not enforced during transformation."""
@@ -326,16 +322,15 @@ class TestManyToOneMapping:
             foo: str
             bar: int
 
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations={
                 "subject_ref": lambda data: f"Patient/{data.get('totally_different_field', '123')}",
                 "performer": lambda data: "Dr. Smith",
             },
             min_input_schemas=[CompletelyDifferentModel],  # This is just metadata
             output_schema=Observation,
+            mode=ValidationMode.STRICT,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.STRICT)
 
         # Can pass any dict, not enforced to match CompletelyDifferentModel
         result = mapper(
@@ -349,7 +344,7 @@ class TestManyToOneMapping:
     def test_empty_schemas_lists(self) -> None:
         """Test DataMapping with empty or None schema lists."""
         # Test with None (should default to empty lists)
-        data_mapping1: DataMapping[Any] = DataMapping(
+        mapper1: Mapper[Any] = Mapper(
             transformations={
                 "field1": p.get("source1"),
             },
@@ -357,11 +352,11 @@ class TestManyToOneMapping:
             other_input_schemas=None,
         )
 
-        assert data_mapping1.min_input_schemas == []
-        assert data_mapping1.other_input_schemas == []
+        assert mapper1.min_input_schemas == []
+        assert mapper1.other_input_schemas == []
 
         # Test with explicit empty lists
-        data_mapping2: DataMapping[Any] = DataMapping(
+        mapper2: Mapper[Any] = Mapper(
             transformations={
                 "field2": p.get("source2"),
             },
@@ -369,29 +364,29 @@ class TestManyToOneMapping:
             other_input_schemas=[],
         )
 
-        assert data_mapping2.min_input_schemas == []
-        assert data_mapping2.other_input_schemas == []
+        assert mapper2.min_input_schemas == []
+        assert mapper2.other_input_schemas == []
 
     def test_has_schemas_only_checks_output(self) -> None:
         """Test that has_schemas only checks for output_schema."""
         # With min_input_schemas but no output_schema
-        data_mapping1: DataMapping[Any] = DataMapping(
+        mapper1: Mapper[Any] = Mapper(
             transformations={"field": p.get("source")},
             min_input_schemas=[Patient],
         )
-        assert not data_mapping1.has_schemas
+        assert not mapper1.has_schemas
 
         # With output_schema
-        data_mapping2 = DataMapping(
+        mapper2 = Mapper(
             transformations={"field": p.get("source")},
             output_schema=Observation,
         )
-        assert data_mapping2.has_schemas
+        assert mapper2.has_schemas
 
         # With both min_input_schemas and output_schema
-        data_mapping3 = DataMapping(
+        mapper3 = Mapper(
             transformations={"field": p.get("source")},
             min_input_schemas=[Patient],
             output_schema=Observation,
         )
-        assert data_mapping3.has_schemas
+        assert mapper3.has_schemas

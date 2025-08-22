@@ -1,4 +1,4 @@
-"""Tests for Mapper as independent dict->dict transformer and DataMapping executor."""
+"""Tests for Mapper as independent dict->dict transformer and validation engine."""
 
 from typing import Any
 
@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 import chidian.partials as p
-from chidian import DataMapping, Mapper, MapperResult, ValidationMode, get
+from chidian import Mapper, MapperResult, ValidationMode, get
 
 
 class TestMapperBasic:
@@ -242,8 +242,8 @@ class TestMapperCalling:
         assert not hasattr(mapper, "can_reverse")
 
 
-class TestMapperWithDataMapping:
-    """Test new Mapper functionality with DataMapping."""
+class TestMapperWithValidation:
+    """Test Mapper functionality with validation modes."""
 
     def test_mapper_backward_compatibility(self) -> None:
         """Test that Mapper maintains backward compatibility with dict."""
@@ -253,7 +253,7 @@ class TestMapperWithDataMapping:
         assert result == {"output": "test"}
 
     def test_mapper_with_data_mapping_strict(self) -> None:
-        """Test Mapper with DataMapping in strict mode."""
+        """Test Mapper with schema validation in strict mode."""
 
         class InputModel(BaseModel):
             name: str
@@ -264,16 +264,12 @@ class TestMapperWithDataMapping:
             age_group: str
 
         mapper = Mapper(
-            DataMapping(
-                transformations={
-                    "display_name": p.get("name") | p.upper,
-                    "age_group": lambda d: "adult"
-                    if d.get("age", 0) >= 18
-                    else "child",
-                },
-                min_input_schemas=[InputModel],
-                output_schema=OutputModel,
-            ),
+            transformations={
+                "display_name": p.get("name") | p.upper,
+                "age_group": lambda d: "adult" if d.get("age", 0) >= 18 else "child",
+            },
+            min_input_schemas=[InputModel],
+            output_schema=OutputModel,
             mode=ValidationMode.STRICT,
         )
 
@@ -290,7 +286,7 @@ class TestMapperWithDataMapping:
         assert result2.age_group == "child"
 
     def test_mapper_with_data_mapping_flexible(self) -> None:
-        """Test Mapper with DataMapping in flexible mode."""
+        """Test Mapper with schema validation in flexible mode."""
 
         class InputModel(BaseModel):
             name: str
@@ -300,16 +296,15 @@ class TestMapperWithDataMapping:
             display_name: str
             age_group: str
 
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations={
                 "display_name": p.get("name") | p.upper,
                 "age_group": lambda d: "adult" if d.get("age", 0) >= 18 else "child",
             },
             min_input_schemas=[InputModel],
             output_schema=OutputModel,
+            mode=ValidationMode.FLEXIBLE,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
 
         # Valid input
         result = mapper({"name": "John", "age": 25})
@@ -329,32 +324,27 @@ class TestMapperWithDataMapping:
     def test_mapper_auto_mode(self) -> None:
         """Test Mapper auto mode selection."""
         # With schemas -> strict
-        data_mapping_with_schemas: DataMapping[BaseModel] = DataMapping(
+        mapper_with_schemas: Mapper[BaseModel] = Mapper(
             transformations={"out": p.get("in")},
             min_input_schemas=[BaseModel],
             output_schema=BaseModel,
         )
-        mapper = Mapper(data_mapping_with_schemas)
-        assert mapper.mode == ValidationMode.STRICT
+        assert mapper_with_schemas.mode == ValidationMode.STRICT
 
         # Without schemas -> flexible
-        data_mapping_no_schemas: DataMapping[Any] = DataMapping(
-            transformations={"out": p.get("in")}
-        )
-        mapper = Mapper(data_mapping_no_schemas)
-        assert mapper.mode == ValidationMode.FLEXIBLE
+        mapper_no_schemas: Mapper[Any] = Mapper(transformations={"out": p.get("in")})
+        assert mapper_no_schemas.mode == ValidationMode.FLEXIBLE
 
-    def test_mapper_with_pure_data_mapping(self) -> None:
-        """Test Mapper with DataMapping without schemas."""
-        data_mapping: DataMapping[Any] = DataMapping(
+    def test_mapper_with_pure_transformation(self) -> None:
+        """Test Mapper without schemas."""
+        mapper: Mapper[Any] = Mapper(
             transformations={
                 "id": p.get("patient.id"),
                 "name": p.get("patient.name"),
                 "provider": p.get("provider.name", default="Unknown"),
-            }
+            },
+            mode=ValidationMode.FLEXIBLE,
         )
-
-        mapper = Mapper(data_mapping, mode=ValidationMode.FLEXIBLE)
 
         result = mapper(
             {
@@ -363,7 +353,8 @@ class TestMapperWithDataMapping:
             }
         )
 
-        assert isinstance(result, MapperResult)
-        assert result.data["id"] == "123"
-        assert result.data["name"] == "John"
-        assert result.data["provider"] == "Dr. Smith"
+        # Without schemas, returns dict directly
+        assert isinstance(result, dict)
+        assert result["id"] == "123"
+        assert result["name"] == "John"
+        assert result["provider"] == "Dr. Smith"

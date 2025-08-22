@@ -1,8 +1,8 @@
-"""Comprehensive tests for special types (DROP, KEEP) with Mapper and DataMapping."""
+"""Comprehensive tests for special types (DROP, KEEP) with Mapper."""
 
 from typing import Any
 
-from chidian import DROP, KEEP, DataMapping, Mapper, get
+from chidian import DROP, KEEP, Mapper, get
 from tests.structstest import (
     ComplexPersonData,
     FlatPersonData,
@@ -53,8 +53,8 @@ class TestSeedProcessing:
         assert keep_obj.process({}) == complex_data
 
 
-class TestSeedsWithDataMapping:
-    """Test special type integration with DataMapping and Mapper."""
+class TestSeedsWithMapper:
+    """Test special type integration with Mapper."""
 
     def test_simple_data_flow_without_special_types(
         self, simple_data: dict[str, Any]
@@ -67,12 +67,11 @@ class TestSeedsWithDataMapping:
             "is_active": p_get("data.patient.active"),
         }
 
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations=mapping,
             min_input_schemas=[SourceData],
             output_schema=SimpleTarget,
         )
-        mapper = Mapper(data_mapping)
         result = mapper(SourceData.model_validate(simple_data))
 
         assert isinstance(result, SimpleTarget)
@@ -83,7 +82,7 @@ class TestSeedsWithDataMapping:
         """Test KEEP objects in data transformations.
 
         Note: This test demonstrates that special type processing is not yet implemented
-        in the current DataMapping/Mapper system. KEEP objects need to be processed
+        in the current Mapper system. KEEP objects need to be processed
         to extract their values before Pydantic validation.
         """
         # For now, manually process KEEP objects since automatic processing isn't implemented
@@ -94,12 +93,11 @@ class TestSeedsWithDataMapping:
             "regular_value": lambda _data: "regular_string",
         }
 
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations=mapping,
             min_input_schemas=[SourceData],
             output_schema=KeepTestTarget,
         )
-        mapper = Mapper(data_mapping)
 
         source = SourceData(data={})
         result = mapper(source)
@@ -162,12 +160,11 @@ class TestSeedsWithDataMapping:
             "last_previous_address": last_previous_address_transform,
         }
 
-        data_mapping = DataMapping(
+        mapper = Mapper(
             transformations=mapping,
             min_input_schemas=[ComplexPersonData],
             output_schema=FlatPersonData,
         )
-        mapper = Mapper(data_mapping)
 
         source = ComplexPersonData.model_validate(test_A)
         result = mapper(source)
