@@ -4,43 +4,32 @@
 
 > Declarative, type-safe data mapping for savvy data engineers
 
-chidian is a pure Python framework for composable, readable, and sharable data mappings built on top of **Pydantic v2**.
+**chidian** is a composable framework for building readable data transformations with **Pydantic v2**.
 
-## 30-second tour
+## Quick Start
 ```python
 from pydantic import BaseModel
 from chidian import Mapper
 import chidian.partials as p
 
-# 0. Identify the data you want to map
-"""
-Here we have this nested data:
-"""
+# Source data (nested)
 source_data = {
-    "name": {
-        "first": "Gandalf",
-        "given": ["the", "Grey"],
-        "suffix": None
-    },
+    "name": {"first": "Gandalf", "given": ["the", "Grey"], "suffix": None},
     "address": {
-        "street": [
-            "Bag End",
-            "Hobbiton"
-        ],
+        "street": ["Bag End", "Hobbiton"],
         "city": "The Shire",
         "postal_code": "ME001",
         "country": "Middle Earth"
     }
 }
-"""
-And we want a flattened representation like:
-"""
-res = {
+
+# Target data (flat)
+target = {
     "full_name": "Gandalf the Grey",
     "address": "Bag End\nHobbiton\nThe Shire\nME001\nMiddle Earth"
 }
 
-# 1. Define your source & target schemas
+# Define schemas
 class SourceSchema(BaseModel):
     name: dict
     address: dict
@@ -49,7 +38,7 @@ class TargetSchema(BaseModel):
     full_name: str
     address: str
 
-# 2. Create Mapper with transformations and schemas
+# Create type-safe mapper
 person_mapping = Mapper(
     {
         "full_name": p.get([
@@ -57,6 +46,7 @@ person_mapping = Mapper(
             "name.given[*]",
             "name.suffix"
         ]).join(" ", flatten=True),
+
         "address": p.get([
             "address.street[*]",
             "address.city",
@@ -68,125 +58,93 @@ person_mapping = Mapper(
     output_schema=TargetSchema,
 )
 
-# 3. Execute!
-source_obj = SourceSchema(**source_data)
-result = person_mapping(source_obj)
-assert result == TargetSchema(**res)
+# Execute
+result = person_mapping(SourceSchema(**source_data))
+assert result == TargetSchema(**target)
 ```
 
-See the [tests](/chidian/tests) for some use-cases.
+## Core Features
 
-## Feature highlights
+| Component        | Purpose                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| **Mapper**       | Dict→dict transformations with optional schema validation                |
+| **DataMapping**  | Pydantic-validated, type-safe transformations                            |
+| **Partials API** | Composable operators for concise transformation chains                   |
+| **Table**        | Sparse tables with path queries, joins, pandas/polars interop           |
+| **Lexicon**      | Bidirectional code lookups (e.g., LOINC ↔ SNOMED) with metadata         |
 
-| Feature          | In one line                                                                  |
-| ---------------- | ---------------------------------------------------------------------------- |
-| **Mapper**       | Focused dict→dict runtime transformations with schemas preferred.            |
-| **DataMapping**  | Adds Pydantic validation around a `Mapper` for safe, forward-only transforms. |
-| **Partials API** | Operator chains with partials module improve conciseness.           |
-| **Table**        | Lightweight sparse table: path queries, joins, pandas/polars interop.        |
-| **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |
+## Table & DataFrames
 
-
-## Table: DataFrames interoperability
-
-The `Table` class provides seamless conversion to pandas and polars DataFrames via optional dependencies:
-
-### Installation
+Seamless conversion between chidian Tables and pandas/polars:
 
 ```bash
-# For pandas support
-pip install 'chidian[pandas]'
-
-# For polars support
-pip install 'chidian[polars]'
-
-# For both
-pip install 'chidian[df]'
+pip install 'chidian[pandas]'   # pandas support
+pip install 'chidian[polars]'   # polars support
+pip install 'chidian[df]'       # both
 ```
-
-### Usage
 
 ```python
 from chidian.table import Table
 
-# Create a table
 table = Table([
     {"name": "Alice", "age": 30},
     {"name": "Bob", "age": 25}
 ])
 
-# Convert to pandas (with row keys as index)
-df_pd = table.to_pandas(index=True)        # pandas index from row keys
-
-# Convert to polars (with row keys as column)
-df_pl = table.to_polars(add_index=True)    # polars gets '_index' column
+df_pd = table.to_pandas(index=True)
+df_pl = table.to_polars(add_index=True)
 ```
 
-## Flattening nested data
+### Flatten Nested Data
 
-The `Table` class provides powerful flattening capabilities to convert nested dictionaries and lists into flat, column-based structures using intuitive path notation:
+Convert nested structures into flat, column-based tables:
 
 ```python
-from chidian.table import Table
-
-# Create table with nested data
 table = Table([
     {"user": {"name": "John", "prefs": ["email", "sms"]}, "id": 123},
     {"user": {"name": "Jane", "prefs": ["phone"]}, "id": 456}
 ])
 
-# Flatten nested structures
+# Flatten with intuitive path notation
 flat = table.flatten()
 print(flat.columns)
 # {'id', 'user.name', 'user.prefs[0]', 'user.prefs[1]'}
 
-# Direct export with flattening
-df = table.to_pandas(flatten=True)     # Flat pandas DataFrame
-df = table.to_polars(flatten=True)     # Flat polars DataFrame
-table.to_csv("flat.csv", flatten=True) # Flat CSV with path columns
+# Export flattened data
+table.to_pandas(flatten=True)
+table.to_polars(flatten=True)
+table.to_csv("flat.csv", flatten=True)
 
-# Control flattening depth and array limits
-limited = table.flatten(max_depth=2, array_index_limit=5)
+# Control flattening behavior
+table.flatten(max_depth=2, array_index_limit=5)
 ```
 
-**Key features:**
-- **Intuitive paths**: `user.name`, `items[0]`, `data.settings.theme`
-- **Sparse-friendly**: Different nesting across rows creates union of all paths
-- **Special key handling**: Keys with dots/brackets use bracket notation: `["key.with.dots"]`
-- **Depth control**: Limit recursion to prevent over-flattening
-- **Array limits**: Cap array indices to manage large arrays
-- **Seamless integration**: All Table operations (join, select, group_by) work on flattened data
+**Features:**
+- Path notation: `user.name`, `items[0]`, `data.settings.theme`
+- Handles sparse data (different nesting per row)
+- Special key escaping for dots/brackets
+- Depth and array size controls
 
-## Powered by Pydantic
+## Design Philosophy
 
-chidian treats **Pydantic v2 models as first‑class citizens**:
+Built by data engineers, for data engineers. chidian solves common pain points:
 
-* Validate inputs & outputs automatically with Pydantic v2
-* `DataMapping` wraps your `Mapper` for IDE completion & mypy.
-* You can drop down to plain dicts when prototyping with `strict=False`.
+**Challenges:**
+- Verbose edge-case handling
+- Hard to share one-off code
+- Difficult collaboration on data transformations
 
+**Solutions:**
+- **Iterate over perfection**: Learn and adapt as you build
+- **Functions as first-class objects**: Compose transformations cleanly
+- **JSON-first**: Simple, universal data structures
 
-## Motivation + Philosophy
-
-This is a library for data engineers by a data engineer. Data engineering touches many parts of the stack, and the heuristics for data engineering offer some subtle differences from traditional software engineering.
-
-The goals of the library are:
-1. Make fast, reliable, and readable data mappings
-2. Make it easy to build-on + share pre-existing mappings (so we don't need to start from scratch every time!)
-
-Several challenges come up with traditional data mapping code:
-1. **It's verbose**: Data can be very messy and has a lot of edge cases
-2. **It's hard to share**: Code is often written for one-off use-cases
-3. **It's difficult to collaborate**: Data interoperability becomes more difficult when subtle cases
-
-chidian aims to solve these issues by taking stronger opinions on common operations:
-1. **Prefer iteration over exactness**: With data, we learn as we iterate and use what we need!
-2. **Prefer using functions as objects**: Simplify code by passing functions as first-class objects.
-3. **Prefer JSON-like structures**: No toml, yaml, xml -- just JSON (for now...).
-
-The heart of chidian is applying [functional programming](https://en.wikipedia.org/wiki/Functional_programming) principles to data mappings.
-Ideas from this repo are inspired from functional programming and other libraries (e.g. [Pydantic](https://github.com/pydantic/pydantic), [JMESPath](https://github.com/jmespath), [funcy](https://github.com/Suor/funcy), [Boomerang](https://github.com/boomerang-lang/boomerang/tree/master), [lens](https://hackage.haskell.org/package/lens), etc.)
+chidian applies functional programming principles to data mappings, drawing inspiration from [Pydantic](https://github.com/pydantic/pydantic), [JMESPath](https://github.com/jmespath), [funcy](https://github.com/Suor/funcy), and others.
 
 ## Contributing
 
-All contributions welcome! Please open an Issue and tag me -- I'll make sure to get back to you and we can scope out a PR.
+Contributions welcome! Open an issue to discuss your idea before submitting a PR.
+
+---
+
+See [tests](/chidian/tests) for more examples.
