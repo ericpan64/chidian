@@ -231,3 +231,97 @@ def test_real_world_usage():
         p.get("users[0].score") | p.to_float | p.round_to(0) | p.to_int
     )
     assert get_first_user_score(data) == 86
+
+
+def test_multi_path_get():
+    """Test multi-path get() functionality."""
+    data = {
+        "name": {
+            "first": "John",
+            "middle": ["Robert", "James"],
+            "last": "Doe",
+        }
+    }
+
+    # Multi-path extraction returns list of all values
+    get_names = p.get(["name.first", "name.middle[*]", "name.last"])
+    result = get_names(data)
+    assert result == ["John", "Robert", "James", "Doe"]
+
+
+def test_multi_path_get_with_join():
+    """Test multi-path get() with join chaining."""
+    data = {
+        "name": {
+            "first": "Gandalf",
+            "given": ["the", "Grey"],
+            "suffix": None,
+        }
+    }
+
+    # Join without flatten - nested lists stay nested
+    get_name = p.get(["name.first", "name.given", "name.suffix"]).join(" ")
+    result = get_name(data)
+    # Result: "Gandalf ['the', 'Grey']"
+    assert "Gandalf" in result
+
+    # Join with flatten - nested lists are flattened and None filtered
+    get_name_flat = p.get(["name.first", "name.given[*]", "name.suffix"]).join(
+        " ", flatten=True
+    )
+    result = get_name_flat(data)
+    assert result == "Gandalf the Grey"
+
+
+def test_method_chaining_syntax():
+    """Test the new . method chaining syntax."""
+    data = {"user": {"email": "JOHN.DOE@EXAMPLE.COM", "tags": ["admin", "user"]}}
+
+    # Old pipe syntax still works
+    process_email_pipe = p.get("user.email") | p.lower | p.split("@") | p.first
+    assert process_email_pipe(data) == "john.doe"
+
+    # New dot syntax
+    process_email_dot = p.get("user.email").lower().split("@").first()
+    assert process_email_dot(data) == "john.doe"
+
+    # Chaining with parameters
+    process_tags = p.get("user.tags").join(", ")
+    assert process_tags(data) == "admin, user"
+
+
+def test_join_flatten_nested_lists():
+    """Test join() with flatten parameter for nested lists."""
+    # Without flatten
+    data = ["a", ["b", "c"], "d", None]
+    result = p.join(", ")(data)
+    assert "a" in result and "d" in result
+
+    # With flatten
+    result_flat = p.join(", ", flatten=True)(data)
+    assert result_flat == "a, b, c, d"
+
+
+def test_multi_path_with_address():
+    """Test multi-path example from README."""
+    data = {
+        "address": {
+            "street": ["123 Main St", "Apt 4"],
+            "city": "Boston",
+            "postal_code": "02101",
+            "country": "USA",
+        }
+    }
+
+    get_address = p.get(
+        [
+            "address.street[*]",
+            "address.city",
+            "address.postal_code",
+            "address.country",
+        ]
+    ).join("\n", flatten=True)
+
+    result = get_address(data)
+    expected = "123 Main St\nApt 4\nBoston\n02101\nUSA"
+    assert result == expected

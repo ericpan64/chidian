@@ -2,59 +2,76 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> Declarative, type-safe data mapping for humans.
+> Declarative, type-safe data mapping for savvy data engineers
 
 chidian is a pure Python framework for composable, readable, and sharable data mappings built on top of **Pydantic v2**.
 
 ## 30-second tour
 ```python
 from pydantic import BaseModel
-from chidian import Mapper, DataMapping
+from chidian import Mapper
 import chidian.partials as p
 
-# 1️⃣ Define your source & target schemas
-class Source(BaseModel):
+# 0. Identify the data you want to map
+"""
+Here we have this nested data:
+"""
+source_data = {
+    "name": {
+        "first": "Gandalf",
+        "given": ["the", "Grey"],
+        "suffix": None
+    },
+    "address": {
+        "street": [
+            "Bag End",
+            "Hobbiton"
+        ],
+        "city": "The Shire",
+        "postal_code": "ME001",
+        "country": "Middle Earth"
+    }
+}
+"""
+And we want a flattened representation like:
+"""
+res = {
+    "full_name": "Gandalf the Grey",
+    "address": "Bag End\nHobbiton\nThe Shire\nME001\nMiddle Earth"
+}
+
+# 1. Define your source & target schemas
+class SourceSchema(BaseModel):
     name: dict
     address: dict
 
-class Target(BaseModel):
+class TargetSchema(BaseModel):
     full_name: str
     address: str
 
-# 2️⃣ Write pure dict→dict transformation logic with `Mapper`
-fmt = p.template("{} {} {}", skip_none=True)
-
-person_mapper = Mapper(
-    lambda src: {
-        "full_name": fmt(
-            p.get("name.first")(src),
-            p.get("name.given[*]") | p.join(" ")(src),
-            p.get("name.suffix")(src),
-        ),
-        "address": p.get("address") | p.flatten_paths(
-            [
-                "street[0]",
-                "street[1]",
-                "city",
-                "postal_code",
-                "country",
-            ],
-            delimiter="\n",
-        )(src),
-    }
+# 2. Create Mapper with transformations and schemas
+person_mapping = Mapper(
+    {
+        "full_name": p.get([
+            "name.first",
+            "name.given[*]",
+            "name.suffix"
+        ]).join(" ", flatten=True),
+        "address": p.get([
+            "address.street[*]",
+            "address.city",
+            "address.postal_code",
+            "address.country"
+        ]).join("\n", flatten=True),
+    },
+    min_input_schemas=[SourceSchema],
+    output_schema=TargetSchema,
 )
 
-# 3️⃣ Wrap it with `DataMapping` for schema validation
-person_mapping = DataMapping(
-    mapper=person_mapper,
-    input_schema=Source,
-    output_schema=Target,
-)
-
-# 4️⃣ Execute!
-source_obj = Source.model_validate(source_data)
-result = person_mapping.forward(source_obj)
-print(result)
+# 3. Execute!
+source_obj = SourceSchema(**source_data)
+result = person_mapping(source_obj)
+assert result == TargetSchema(**res)
 ```
 
 See the [tests](/chidian/tests) for some use-cases.
@@ -63,9 +80,9 @@ See the [tests](/chidian/tests) for some use-cases.
 
 | Feature          | In one line                                                                  |
 | ---------------- | ---------------------------------------------------------------------------- |
-| **Mapper**       | Pure dict→dict runtime transformations – no schema required.                 |
+| **Mapper**       | Focused dict→dict runtime transformations with schemas preferred.            |
 | **DataMapping**  | Adds Pydantic validation around a `Mapper` for safe, forward-only transforms. |
-| **Partials API** | `|` operator chains (`split | last | upper`) keep lambdas away.           |
+| **Partials API** | Operator chains with partials module improve conciseness.           |
 | **Table**        | Lightweight sparse table: path queries, joins, pandas/polars interop.        |
 | **Lexicon**      | Bidirectional code look‑ups *(LOINC ↔ SNOMED)* with defaults + metadata.     |
 
@@ -84,7 +101,7 @@ pip install 'chidian[pandas]'
 pip install 'chidian[polars]'
 
 # For both
-pip install 'chidian[dfs]'
+pip install 'chidian[df]'
 ```
 
 ### Usage

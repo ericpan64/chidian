@@ -242,6 +242,65 @@ class TestMapperCalling:
         assert not hasattr(mapper, "can_reverse")
 
 
+class TestMapperNewSyntax:
+    """Test Mapper with new ergonomic syntax from README."""
+
+    def test_readme_example(self) -> None:
+        """Test the exact example from README with new syntax."""
+        from pydantic import BaseModel
+
+        source_data = {
+            "name": {
+                "first": "Gandalf",
+                "given": ["the", "Grey"],
+                "suffix": None,
+            },
+            "address": {
+                "street": ["Bag End", "Hobbiton"],
+                "city": "The Shire",
+                "postal_code": "ME001",
+                "country": "Middle Earth",
+            },
+        }
+
+        class SourceSchema(BaseModel):
+            name: dict
+            address: dict
+
+        class TargetSchema(BaseModel):
+            full_name: str
+            address: str
+
+        person_mapping = Mapper(
+            {
+                "full_name": p.get(
+                    [
+                        "name.first",
+                        "name.given[*]",
+                        "name.suffix",
+                    ]
+                ).join(" ", flatten=True),
+                "address": p.get(
+                    [
+                        "address.street[*]",
+                        "address.city",
+                        "address.postal_code",
+                        "address.country",
+                    ]
+                ).join("\n", flatten=True),
+            },
+            min_input_schemas=[SourceSchema],
+            output_schema=TargetSchema,
+        )
+
+        source_obj = SourceSchema(**source_data)
+        result = person_mapping(source_obj)
+
+        assert isinstance(result, TargetSchema)
+        assert result.full_name == "Gandalf the Grey"
+        assert result.address == "Bag End\nHobbiton\nThe Shire\nME001\nMiddle Earth"
+
+
 class TestMapperWithValidation:
     """Test Mapper functionality with validation modes."""
 

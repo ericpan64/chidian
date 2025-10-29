@@ -3,9 +3,9 @@ from enum import Enum
 from typing import (
     Any,
     Callable,
-    Dict,
     Generic,
     List,
+    Mapping,
     Optional,
     Type,
     TypeVar,
@@ -76,7 +76,7 @@ class Mapper(Generic[_OutT]):
 
     def __init__(
         self,
-        transformations: Dict[str, Callable[[dict], Any] | Any],
+        transformations: Mapping[str, Callable[..., Any] | Any],
         output_schema: Optional[Type[_OutT]] = None,
         mode: ValidationMode = ValidationMode.AUTO,
         min_input_schemas: Optional[List[Type[BaseModel]]] = None,
@@ -94,12 +94,16 @@ class Mapper(Generic[_OutT]):
             other_input_schemas: Additional source models (metadata-only)
             collect_all_errors: In flexible mode, whether to collect all errors
         """
-        if not isinstance(transformations, dict):
+        # Convert Mapping to dict if needed
+        if isinstance(transformations, dict):
+            self.transformations = transformations
+        elif hasattr(transformations, "items"):
+            # Support Mapping types by converting to dict
+            self.transformations = dict(transformations)
+        else:
             raise TypeError(
-                f"Transformations must be dict, got {type(transformations).__name__}"
+                f"Transformations must be dict or Mapping, got {type(transformations).__name__}"
             )
-
-        self.transformations = transformations
         self.output_schema = output_schema
         self.min_input_schemas = min_input_schemas or []
         self.other_input_schemas = other_input_schemas or []
