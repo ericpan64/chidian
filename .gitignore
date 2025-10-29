@@ -130,3 +130,6 @@ venv/
 .mypy_cache/
 .ruff_cache/
 # END roobert
+
+.pithy/
+.claude*
