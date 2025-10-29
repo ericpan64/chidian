@@ -1,5 +1,4 @@
 from .core import get, put
-from .data_mapping import DataMapping
 from .lexicon import Lexicon, LexiconBuilder
 from .lib.get_dsl_parser import parse_path_peg as parse_path
 from .mapper import DROP, KEEP, Mapper, MapperResult, ValidationMode
@@ -12,7 +11,6 @@ __all__ = [
     "parse_path",
     "Table",
     "Mapper",
-    "DataMapping",
     "Lexicon",
     "LexiconBuilder",
     "DROP",

@@ -44,9 +44,52 @@ class FunctionChain:
         """Number of operations in the chain."""
         return len(self.operations)
 
+    def __getattr__(self, name: str) -> Any:
+        """
+        Support method chaining by looking up chainable functions in the module.
+
+        This allows: p.get("path").join(" ").upper() instead of p.get("path") | p.join(" ") | p.upper
+        """
+        # Get the current module's globals to look up functions
+        import sys
+
+        current_module = sys.modules[__name__]
+
+        # Check if the attribute is a known chainable function
+        if hasattr(current_module, name):
+            attr = getattr(current_module, name)
+            # If it's a ChainableFunction or a function that returns one, create a method
+            if isinstance(attr, ChainableFunction):
+                # Return a function that chains this operation
+                def chain_method(*args, **kwargs):
+                    new_op = (
+                        attr
+                        if not args and not kwargs
+                        else (lambda v: attr(*args, **kwargs)(v))
+                    )
+                    return FunctionChain(*self.operations, new_op)
+
+                return chain_method
+            # If it's a function that returns a ChainableFunction (like split, join, etc.)
+            elif callable(attr):
+
+                def chain_method(*args, **kwargs):
+                    new_op = attr(*args, **kwargs)
+                    if isinstance(new_op, ChainableFunction):
+                        return FunctionChain(*self.operations, new_op.func)
+                    elif callable(new_op):
+                        return FunctionChain(*self.operations, new_op)
+                    return FunctionChain(*self.operations, lambda v: new_op)
+
+                return chain_method
+
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
+
 
 class ChainableFunction:
-    """Wrapper to make any function/partial chainable with |."""
+    """Wrapper to make any function/partial chainable with | or method chaining."""
 
     def __init__(self, func: Callable):
         self.func = func
@@ -76,19 +119,60 @@ class ChainableFunction:
         """Call the wrapped function."""
         return self.func(*args, **kwargs)
 
+    def __getattr__(self, name: str) -> Any:
+        """Support method chaining by delegating to FunctionChain."""
+        # Convert to FunctionChain and delegate
+        return getattr(FunctionChain(self.func), name)
+
     def __repr__(self) -> str:
         return f"ChainableFunction({self.__name__})"
 
 
 def get(
-    key: str, default: Any = None, apply: Any = None, strict: bool = False
-) -> Callable[[Any], Any]:
-    """Create a partial function for get operations."""
+    key: str | list[str], default: Any = None, apply: Any = None, strict: bool = False
+) -> FunctionChain:
+    """
+    Create a chainable function for get operations.
 
+    Args:
+        key: Path string (e.g., "data.items[0].name") or list of paths for multi-path extraction
+        default: Default value if path not found
+        apply: Function(s) to apply to the result (legacy parameter)
+        strict: If True, raise errors on missing paths
+
+    Returns:
+        FunctionChain that extracts values from source data and supports method chaining
+        like .join(), .upper(), etc.
+
+    Examples:
+        # Single path
+        p.get("user.name")(data)
+
+        # Multi-path with chaining
+        p.get(["name.first", "name.given[*]", "name.suffix"]).join(" ", unwrap=True)(data)
+    """
+    # Multi-path extraction
+    if isinstance(key, list):
+
+        def multi_get(source):
+            values = []
+            for path in key:
+                val = _get(source, path, default=default, strict=strict)
+                if val is not None:
+                    # If val is a list, extend; otherwise append
+                    if isinstance(val, list):
+                        values.extend(val)
+                    else:
+                        values.append(val)
+            return values
+
+        return FunctionChain(multi_get)
+
+    # Single path - keep backward compatibility
     def get_partial(source):
         return _get(source, key, default=default, apply=apply, strict=strict)
 
-    return get_partial
+    return FunctionChain(get_partial)
 
 
 # Arithmetic operations
@@ -150,11 +234,36 @@ def replace(old: str, new: str) -> ChainableFunction:
     )
 
 
-def join(sep: str) -> ChainableFunction:
-    """Create a chainable join function."""
-    return ChainableFunction(
-        partial(lambda separator, items: separator.join(items), sep)
-    )
+def join(sep: str, flatten: bool = False) -> ChainableFunction:
+    """
+    Create a chainable join function.
+
+    Args:
+        sep: Separator string
+        flatten: If True, flatten nested lists and filter None values before joining
+    """
+    if flatten:
+
+        def join_flatten(items):
+            flat = []
+            for item in items:
+                if isinstance(item, list):
+                    # Flatten nested list
+                    flat.extend(str(x) for x in item if x is not None)
+                elif item is not None:
+                    flat.append(str(item))
+            return sep.join(flat)
+
+        return ChainableFunction(join_flatten)
+    else:
+        return ChainableFunction(
+            partial(
+                lambda separator, items: separator.join(
+                    str(x) for x in items if x is not None
+                ),
+                sep,
+            )
+        )
 
 
 # Array/List operations as ChainableFunction
