@@ -70,60 +70,6 @@ assert result == TargetSchema(**target)
 | **Mapper**       | Dict→dict transformations with optional schema validation                |
 | **DataMapping**  | Pydantic-validated, type-safe transformations                            |
 | **Partials API** | Composable operators for concise transformation chains                   |
-| **Table**        | Sparse tables with path queries, joins, pandas/polars interop           |
-| **Lexicon**      | Bidirectional code lookups (e.g., LOINC ↔ SNOMED) with metadata         |
-
-## Table & DataFrames
-
-Seamless conversion between chidian Tables and pandas/polars:
-
-```bash
-pip install 'chidian[pandas]'   # pandas support
-pip install 'chidian[polars]'   # polars support
-pip install 'chidian[df]'       # both
-```
-
-```python
-from chidian.table import Table
-
-table = Table([
-    {"name": "Alice", "age": 30},
-    {"name": "Bob", "age": 25}
-])
-
-df_pd = table.to_pandas(index=True)
-df_pl = table.to_polars(add_index=True)
-```
-
-### Flatten Nested Data
-
-Convert nested structures into flat, column-based tables:
-
-```python
-table = Table([
-    {"user": {"name": "John", "prefs": ["email", "sms"]}, "id": 123},
-    {"user": {"name": "Jane", "prefs": ["phone"]}, "id": 456}
-])
-
-# Flatten with intuitive path notation
-flat = table.flatten()
-print(flat.columns)
-# {'id', 'user.name', 'user.prefs[0]', 'user.prefs[1]'}
-
-# Export flattened data
-table.to_pandas(flatten=True)
-table.to_polars(flatten=True)
-table.to_csv("flat.csv", flatten=True)
-
-# Control flattening behavior
-table.flatten(max_depth=2, array_index_limit=5)
-```
-
-**Features:**
-- Path notation: `user.name`, `items[0]`, `data.settings.theme`
-- Handles sparse data (different nesting per row)
-- Special key escaping for dots/brackets
-- Depth and array size controls
 
 ## Design Philosophy
 
