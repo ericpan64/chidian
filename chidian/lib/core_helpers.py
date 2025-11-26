@@ -1,10 +1,10 @@
 """
-Helper functions for core get/put operations.
+Helper functions for core grab operations.
 """
 
 from typing import Any, Callable
 
-from .parser import Path, PathSegment, PathSegmentType
+from .parser import Path, PathSegmentType
 
 
 def traverse_path(data: Any, path: Path, strict: bool = False) -> Any:
@@ -24,8 +24,6 @@ def traverse_path(data: Any, path: Path, strict: bool = False) -> Any:
             if segment.type == PathSegmentType.KEY:
                 assert isinstance(segment.value, str)
                 result = _traverse_key(item, segment.value, strict)
-                # Only extend if we applied key to a list of dicts
-                # (i.e., when item was a list and we distributed the key)
                 if isinstance(item, list) and isinstance(result, list):
                     next_items.extend(result)
                 else:
@@ -56,7 +54,6 @@ def traverse_path(data: Any, path: Path, strict: bool = False) -> Any:
 
         current = next_items
 
-    # Return single item if only one result
     if len(current) == 1:
         return current[0]
     return current
@@ -73,7 +70,6 @@ def _traverse_key(data: Any, key: str, strict: bool) -> Any:
             return None
 
     elif isinstance(data, list):
-        # Apply key to each dict in list
         results = []
         for item in data:
             if isinstance(item, dict):
@@ -102,7 +98,6 @@ def _traverse_index(data: Any, idx: int, strict: bool) -> Any:
             raise TypeError("Expected list but got different type")
         return None
 
-    # Handle negative indexing
     length = len(data)
     actual_idx = idx if idx >= 0 else length + idx
 
@@ -120,8 +115,6 @@ def _traverse_slice(data: Any, start: int | None, end: int | None, strict: bool)
         if strict:
             raise TypeError("Expected list but got different type")
         return None
-
-    # Python handles negative indices and None values in slices automatically
     return data[start:end]
 
 
@@ -156,170 +149,3 @@ def apply_functions(value: Any, functions: Callable | list[Callable]) -> Any:
             return None
 
     return current
-
-
-def validate_mutation_path(path: Path) -> bool:
-    """Validate that a path is suitable for mutation operations."""
-    if not path.segments:
-        return False
-
-    # Path must start with a key (not an index)
-    if path.segments[0].type != PathSegmentType.KEY:
-        return False
-
-    # Check for unsupported segment types
-    for segment in path.segments:
-        if segment.type in (
-            PathSegmentType.WILDCARD,
-            PathSegmentType.SLICE,
-            PathSegmentType.TUPLE,
-        ):
-            return False
-
-    return True
-
-
-def mutate_path(data: Any, path: Path, value: Any, strict: bool = False) -> None:
-    """Mutate data in-place at the specified path."""
-    if not path.segments:
-        raise ValueError("Empty path")
-
-    # Navigate to parent of target
-    current = data
-    for i, segment in enumerate(path.segments[:-1]):
-        if segment.type == PathSegmentType.KEY:
-            assert isinstance(segment.value, str)
-            current = _ensure_key_container(
-                current, segment.value, path.segments, i, strict
-            )
-        elif segment.type == PathSegmentType.INDEX:
-            assert isinstance(segment.value, int)
-            current = _ensure_index_container(
-                current, segment.value, path.segments, i, strict
-            )
-
-    # Set final value
-    final_segment = path.segments[-1]
-    if final_segment.type == PathSegmentType.KEY:
-        assert isinstance(final_segment.value, str)
-        if not isinstance(current, dict):
-            if strict:
-                raise TypeError(f"Cannot set key '{final_segment.value}' on non-dict")
-            return
-        current[final_segment.value] = value
-
-    elif final_segment.type == PathSegmentType.INDEX:
-        assert isinstance(final_segment.value, int)
-        if not isinstance(current, list):
-            if strict:
-                raise TypeError(f"Cannot set index {final_segment.value} on non-list")
-            return
-
-        idx = final_segment.value
-        # Expand list if needed for positive indices
-        if idx >= 0:
-            while len(current) <= idx:
-                current.append(None)
-            current[idx] = value
-        else:
-            # Negative index
-            actual_idx = len(current) + idx
-            if actual_idx < 0:
-                if strict:
-                    raise IndexError(f"Index {idx} out of range")
-            else:
-                current[actual_idx] = value
-
-
-def _ensure_key_container(
-    current: Any, key: str, segments: list[PathSegment], index: int, strict: bool
-) -> Any:
-    """Ensure a dict exists at key, creating if needed."""
-    if not isinstance(current, dict):
-        if strict:
-            raise TypeError(f"Cannot traverse into non-dict at '{key}'")
-        return current
-
-    # Determine what type of container we need
-    next_segment = segments[index + 1]
-    container_type = _determine_container_type(next_segment)
-
-    if key not in current:
-        # Create appropriate container
-        if container_type == "list":
-            current[key] = []
-        else:
-            current[key] = {}
-    else:
-        # Validate existing container type
-        existing = current[key]
-        if container_type == "list" and not isinstance(existing, list):
-            if strict:
-                raise TypeError(
-                    f"Expected list at '{key}' but found {type(existing).__name__}"
-                )
-            current[key] = []
-        elif container_type == "dict" and not isinstance(existing, dict):
-            if strict:
-                raise TypeError(
-                    f"Expected dict at '{key}' but found {type(existing).__name__}"
-                )
-            current[key] = {}
-
-    return current[key]
-
-
-def _ensure_index_container(
-    current: Any, idx: int, segments: list[PathSegment], index: int, strict: bool
-) -> Any:
-    """Ensure a list exists and has capacity for index."""
-    if not isinstance(current, list):
-        if strict:
-            raise TypeError("Cannot index into non-list")
-        return current
-
-    # Handle negative indexing
-    actual_idx = idx if idx >= 0 else len(current) + idx
-    if actual_idx < 0:
-        if strict:
-            raise IndexError(f"Index {idx} out of range")
-        return current
-
-    # Expand list if needed
-    while len(current) <= actual_idx:
-        current.append(None)
-
-    # Determine container type for this index
-    next_segment = segments[index + 1]
-    container_type = _determine_container_type(next_segment)
-
-    if current[actual_idx] is None:
-        # Create appropriate container
-        if container_type == "list":
-            current[actual_idx] = []
-        else:
-            current[actual_idx] = {}
-    else:
-        # Validate existing container type
-        existing = current[actual_idx]
-        if container_type == "list" and not isinstance(existing, list):
-            if strict:
-                raise TypeError(
-                    f"Expected list at index {idx} but found {type(existing).__name__}"
-                )
-            current[actual_idx] = []
-        elif container_type == "dict" and not isinstance(existing, dict):
-            if strict:
-                raise TypeError(
-                    f"Expected dict at index {idx} but found {type(existing).__name__}"
-                )
-            current[actual_idx] = {}
-
-    return current[actual_idx]
-
-
-def _determine_container_type(segment: PathSegment) -> str:
-    """Determine whether we need a dict or list container."""
-    if segment.type == PathSegmentType.INDEX:
-        return "list"
-    return "dict"
