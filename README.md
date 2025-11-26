@@ -232,4 +232,4 @@ Contributions welcome! Open an issue to discuss your idea before submitting a PR
 
 ---
 
-See [tests](/chidian/tests) for more examples.
+See [tests](/tests) for more examples.
