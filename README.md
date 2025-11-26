@@ -50,7 +50,7 @@ Control what gets excluded from output. `DROP` propagates upward through the str
 | `DROP.GREATGRANDPARENT` | Remove three levels up (raises if out of bounds) |
 
 ```python
-from chidian import DROP, process_drops
+from chidian import DROP, process_output
 
 data = {
     "kept": {"id": "123"},
@@ -64,14 +64,14 @@ data = {
     ],
 }
 
-result = process_drops(data)
+result = process_output(data)
 # Result: {"kept": {"id": "123"}}
 ```
 
 **In lists**, `DROP.THIS_OBJECT` removes just that item:
 
 ```python
-from chidian import DROP, process_drops
+from chidian import DROP, process_output
 
 data = {
     "tags": [
@@ -82,7 +82,7 @@ data = {
     ],
 }
 
-result = process_drops(data)
+result = process_output(data)
 # Result: {"tags": ["first_kept", "third_kept"]}
 ```
 
@@ -91,15 +91,29 @@ result = process_drops(data)
 By default, empty values (`{}`, `[]`, `""`, `None`) are removed. Wrap with `KEEP()` to preserve them:
 
 ```python
-from chidian import KEEP
+from chidian import KEEP, process_output
 
-# KEEP wraps a value to prevent automatic removal
 data = {
     "explicit_empty": KEEP({}),      # Preserved as {}
     "explicit_none": KEEP(None),     # Preserved as None
-    "implicit_empty": {},            # Will be removed by default
+    "implicit_empty": {},            # Removed by default
     "normal_value": "hello",
 }
+
+result = process_output(data)
+# Result: {"explicit_empty": {}, "explicit_none": None, "normal_value": "hello"}
+```
+
+## `process_output` Options
+
+```python
+from chidian import process_output
+
+# Default: remove empty values
+process_output(data)
+
+# Keep all empty values
+process_output(data, remove_empty=False)
 ```
 
 ## Design Philosophy
