@@ -86,6 +86,22 @@ result = process_drops(data)
 # Result: {"tags": ["first_kept", "third_kept"]}
 ```
 
+## `KEEP` — Preserve Empty Values
+
+By default, empty values (`{}`, `[]`, `""`, `None`) are removed. Wrap with `KEEP()` to preserve them:
+
+```python
+from chidian import KEEP
+
+# KEEP wraps a value to prevent automatic removal
+data = {
+    "explicit_empty": KEEP({}),      # Preserved as {}
+    "explicit_none": KEEP(None),     # Preserved as None
+    "implicit_empty": {},            # Will be removed by default
+    "normal_value": "hello",
+}
+```
+
 ## Design Philosophy
 
 Built by data engineers, for data engineers. chidian solves common pain points:
