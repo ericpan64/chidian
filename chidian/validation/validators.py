@@ -1,7 +1,7 @@
 """
 Built-in validators for chidian validation.
 
-Factory functions that return V instances for common validation patterns.
+Provides factory functions that return V instances.
 """
 
 from __future__ import annotations
@@ -26,7 +26,9 @@ def Required(v: V | type | None = None) -> V:
 
     inner = to_validator(v)
     if not isinstance(inner, V):
-        raise TypeError("Required() requires a simple validator, not nested structure")
+        raise TypeError(
+            "Required() on nested structures: use the nested validator directly"
+        )
 
     return V(
         check=inner.check,
