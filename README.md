@@ -158,6 +158,58 @@ def keep_all_empties(d):
     }
 ```
 
+## Strict Mode
+
+Catch missing keys during development:
+
+```python
+from chidian import mapper, grab, mapping_context
+
+@mapper
+def risky_mapping(d):
+    return {
+        "id": grab(d, "data.patient.id"),
+        "missing": grab(d, "key.not.found"),  # Doesn't exist
+    }
+
+# Normal — missing keys become empty/removed
+result = risky_mapping(source)
+
+# Strict — raises KeyError on missing keys
+with mapping_context(strict=True):
+    risky_mapping(source)  # KeyError!
+```
+
+**Note**: Strict mode distinguishes between "key not found" and "key exists with `None` value":
+
+```python
+source = {"has_none": None}
+
+@mapper
+def check_none(d):
+    return {
+        "explicit_none": grab(d, "has_none"),      # OK — key exists, value is None
+        "missing": grab(d, "does.not.exist"),      # Raises in strict mode
+    }
+```
+
+## API Reference
+
+### `@mapper` / `@mapper(remove_empty=True)`
+
+Decorator that transforms a mapping function into a callable mapper.
+
+### `grab(data, path)`
+
+Extract values using dot notation and bracket indexing:
+
+```python
+grab(d, "user.name")           # Nested access
+grab(d, "items[0]")            # List index
+grab(d, "items[-1]")           # Negative index
+grab(d, "users[*].name")       # Map over list
+```
+
 ## Design Philosophy
 
 Built by data engineers, for data engineers. chidian solves common pain points:

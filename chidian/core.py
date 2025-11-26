@@ -4,6 +4,7 @@ Core grab function for chidian data traversal.
 
 from typing import Any, Callable
 
+from .context import is_strict
 from .lib.core_helpers import apply_functions, traverse_path
 from .lib.parser import parse_path
 
@@ -13,7 +14,6 @@ def grab(
     path: str,
     default: Any = None,
     apply: Callable | list[Callable] | None = None,
-    strict: bool = False,
 ) -> Any:
     """
     Extract values from nested data structures using path notation.
@@ -23,10 +23,17 @@ def grab(
         path: Path string (e.g., "data.items[0].name")
         default: Default value if path not found
         apply: Function(s) to apply to the result
-        strict: If True, raise errors on missing paths
 
     Returns:
         Value at path or default if not found
+
+    Raises:
+        ValueError: In strict mode (via mapping_context), if path not found
+
+    Note:
+        Strict mode distinguishes between "key not found" and "key exists with None":
+        - {"has_none": None} -> grab(d, "has_none") returns None (OK in strict mode)
+        - {} -> grab(d, "missing") raises ValueError in strict mode
 
     Examples:
         grab(d, "user.name")           # Nested access
@@ -34,6 +41,8 @@ def grab(
         grab(d, "items[-1]")           # Negative index
         grab(d, "users[*].name")       # Map over list
     """
+    strict = is_strict()
+
     try:
         parsed = parse_path(path)
     except ValueError as e:
