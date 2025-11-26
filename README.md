@@ -193,6 +193,81 @@ def check_none(d):
     }
 ```
 
+## Validation
+
+chidian includes a dict-like validation DSL that mirrors your data structure:
+
+```python
+from chidian.validation import Required, Optional, validate, to_pydantic, Gte, InSet
+
+schema = {
+    "name": Required(str),
+    "email": Optional(str),
+    "age": int & Gte(0),
+    "role": InSet({"admin", "user"}),
+    "tags": [str],
+    "profile": {
+        "bio": Optional(str),
+        "avatar_url": str,
+    },
+}
+
+# Validate data
+data = {"name": "Alice", "age": 30, "role": "admin", "tags": ["python"]}
+result = validate(data, schema)
+
+if result.is_ok():
+    print("Valid!", result.value)
+else:
+    for path, msg in result.error:
+        print(f"  {'.'.join(map(str, path))}: {msg}")
+```
+
+### Composing Validators
+
+Use `&` (and) and `|` (or) to combine validators:
+
+```python
+from chidian.validation import IsType, Gt, Matches
+
+# Both must pass
+positive_int = IsType(int) & Gt(0)
+
+# Either can pass
+str_or_int = str | int
+
+# With regex
+email = str & Matches(r"^[\w.-]+@[\w.-]+\.\w+$")
+```
+
+### Pydantic Integration
+
+Compile schemas to Pydantic models for runtime validation:
+
+```python
+User = to_pydantic("User", {
+    "name": Required(str),
+    "email": Optional(str),
+    "age": int,
+})
+
+user = User(name="Alice", age=30)  # Full Pydantic validation
+```
+
+### Built-in Validators
+
+| Validator | Description |
+|-----------|-------------|
+| `Required(v)` | Field cannot be None |
+| `Optional(v)` | Field can be None |
+| `IsType(t)` | Value must be instance of type |
+| `InRange(lo, hi)` | Length must be in range |
+| `InSet(values)` | Value must be in set |
+| `Matches(pattern)` | String must match regex |
+| `Gt`, `Gte`, `Lt`, `Lte` | Numeric comparisons |
+| `Between(lo, hi)` | Value between bounds |
+| `Predicate(fn, msg)` | Custom validation function |
+
 ## API Reference
 
 ### `@mapper` / `@mapper(remove_empty=True)`
