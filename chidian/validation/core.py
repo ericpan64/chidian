@@ -7,9 +7,9 @@ Provides V, DictV, ListV dataclasses with functional composition.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
-from .types import CheckFn, Err, Ok, Path, ValidationError, ValidationErrors
+from .types import CheckFn, Err, Ok, Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,7 +26,7 @@ class V:
     type_hint: type | None = None
     message: str | None = None
 
-    def __call__(self, value: Any, path: Path = ()) -> Ok[Any] | Err[ValidationError]:
+    def __call__(self, value: Any, path: Path = ()) -> Ok[Any] | Err[tuple[Path, str]]:
         """
         Validate a value.
 
@@ -51,17 +51,11 @@ class V:
 
         return Ok(value)
 
-    def __and__(self, other: V | type | Any) -> V:
-        """
-        Combine with AND logic: both must pass.
-
-        Usage:
-            str & Required()
-            IsType(int) & InRange(0, 100)
-        """
+    def __and__(self, other: V | type | Callable | dict | list) -> V:
+        """Combine with AND logic: both must pass."""
         other_v = to_validator(other)
         if not isinstance(other_v, V):
-            raise TypeError("Cannot combine V with nested validator using &")
+            raise TypeError("Cannot combine V with nested structure using &")
 
         def combined_check(x: Any) -> bool:
             return self.check(x) and other_v.check(x)
@@ -73,24 +67,15 @@ class V:
             message=self.message or other_v.message,
         )
 
-    def __rand__(self, other: type | Any) -> V:
+    def __rand__(self, other: type | Callable | dict | list) -> V:
         """Support `str & Required()` where str comes first."""
+        return to_validator(other) & self
+
+    def __or__(self, other: V | type | Callable) -> V:
+        """Combine with OR logic: at least one must pass."""
         other_v = to_validator(other)
         if not isinstance(other_v, V):
-            raise TypeError("Cannot combine type with V using &")
-        return other_v & self
-
-    def __or__(self, other: V | type | Any) -> V:
-        """
-        Combine with OR logic: at least one must pass.
-
-        Usage:
-            str | int
-            IsType(str) | IsType(int)
-        """
-        other_v = to_validator(other)
-        if not isinstance(other_v, V):
-            raise TypeError("Cannot combine V with nested validator using |")
+            raise TypeError("Cannot combine V with nested structure using |")
 
         def combined_check(x: Any) -> bool:
             return self.check(x) or other_v.check(x)
@@ -101,12 +86,9 @@ class V:
             type_hint=None,  # Union type - defer to Pydantic
         )
 
-    def __ror__(self, other: type | Any) -> V:
+    def __ror__(self, other: type | Callable) -> V:
         """Support `str | int` where str comes first."""
-        other_v = to_validator(other)
-        if not isinstance(other_v, V):
-            raise TypeError("Cannot combine type with V using |")
-        return other_v | self
+        return to_validator(other) | self
 
     def with_message(self, msg: str) -> V:
         """Return new validator with custom error message."""
@@ -125,7 +107,9 @@ class DictV:
     fields: dict[str, V | DictV | ListV]
     required: bool = False
 
-    def __call__(self, value: Any, path: Path = ()) -> Ok[Any] | Err[ValidationErrors]:
+    def __call__(
+        self, value: Any, path: Path = ()
+    ) -> Ok[Any] | Err[list[tuple[Path, str]]]:
         if value is None:
             if self.required:
                 return Err([(path, "Required dict is missing")])
@@ -134,7 +118,7 @@ class DictV:
         if not isinstance(value, dict):
             return Err([(path, f"Expected dict, got {type(value).__name__}")])
 
-        errors: ValidationErrors = []
+        errors: list[tuple[Path, str]] = []
 
         for key, validator in self.fields.items():
             field_path = (*path, key)
@@ -160,7 +144,9 @@ class ListV:
     max_length: int | None = None
     required: bool = False
 
-    def __call__(self, value: Any, path: Path = ()) -> Ok[Any] | Err[ValidationErrors]:
+    def __call__(
+        self, value: Any, path: Path = ()
+    ) -> Ok[Any] | Err[list[tuple[Path, str]]]:
         if value is None:
             if self.required:
                 return Err([(path, "Required list is missing")])
@@ -169,7 +155,7 @@ class ListV:
         if not isinstance(value, list):
             return Err([(path, f"Expected list, got {type(value).__name__}")])
 
-        errors: ValidationErrors = []
+        errors: list[tuple[Path, str]] = []
 
         if self.min_length is not None and len(value) < self.min_length:
             errors.append((path, f"List too short: {len(value)} < {self.min_length}"))
@@ -195,47 +181,34 @@ def to_validator(v: Any) -> V | DictV | ListV:
 
     Conversion rules:
         V | DictV | ListV -> pass through
-        type -> V with isinstance check
+        type -> V(check=isinstance, type_hint=type)
         dict -> DictV with recursive conversion
         list -> ListV with item validator from list[0]
         Callable -> V(check=callable)
     """
-    if isinstance(v, (V, DictV, ListV)):
-        return v
+    match v:
+        case V() | DictV() | ListV():
+            return v
+        case type():
 
-    if isinstance(v, type):
+            def type_check(x: Any, t: type = v) -> bool:
+                return isinstance(x, t)
 
-        def type_check(x: Any, t: type = v) -> bool:
-            return isinstance(x, t)
-
-        return V(check=type_check, type_hint=v)
-
-    if isinstance(v, dict):
-        fields = {k: to_validator(val) for k, val in v.items()}
-        return DictV(fields=fields)
-
-    if isinstance(v, list):
-        if len(v) == 0:
-            raise ValueError("Empty list cannot be converted to validator")
-        if len(v) == 1:
+            return V(check=type_check, type_hint=v)
+        case dict():
+            fields = {k: to_validator(val) for k, val in v.items()}
+            return DictV(fields=fields)
+        case list() if len(v) == 1:
             return ListV(items=to_validator(v[0]))
-        # Multiple items = OR logic for item types (only works with V)
-        first = to_validator(v[0])
-        if not isinstance(first, V):
-            raise TypeError(
-                "Multiple list item types only supported for simple validators"
-            )
-        item_v: V = first
-        for other in v[1:]:
-            other_v = to_validator(other)
-            if not isinstance(other_v, V):
-                raise TypeError(
-                    "Multiple list item types only supported for simple validators"
-                )
-            item_v = item_v | other_v
-        return ListV(items=item_v)
-
-    if callable(v):
-        return V(check=v)
+        case list() if len(v) > 1:
+            # Multiple items = OR logic for item types (must be V instances)
+            item_v: V = to_validator(v[0])  # type: ignore[assignment]
+            for other in v[1:]:
+                other_v = to_validator(other)
+                if isinstance(item_v, V) and isinstance(other_v, V):
+                    item_v = item_v | other_v
+            return ListV(items=item_v)
+        case _ if callable(v):
+            return V(check=v)
 
     raise TypeError(f"Cannot convert {type(v).__name__} to validator")
