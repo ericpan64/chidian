@@ -63,11 +63,10 @@ def normalize_user(d):
 Decorated functions are shareable, testable, and composable:
 
 ```python
-# Import and use directly
-from myproject.mappings import normalize_user, patient_summary
+# Import and use in your codebase
+from myproject.mappings import normalize_user
 
-# Chain mappings
-result = patient_summary(normalize_user(raw_data))
+result = normalize_user(raw_data)
 ```
 
 ## `grab(data, path)`

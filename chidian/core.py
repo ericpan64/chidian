@@ -28,12 +28,14 @@ def grab(
         Value at path or default if not found
 
     Raises:
-        ValueError: In strict mode (via mapping_context), if path not found
+        KeyError: In strict mode, if a dict key is not found
+        IndexError: In strict mode, if a list index is out of range
+        TypeError: In strict mode, if a type mismatch occurs during traversal
 
     Note:
         Strict mode distinguishes between "key not found" and "key exists with None":
         - {"has_none": None} -> grab(d, "has_none") returns None (OK in strict mode)
-        - {} -> grab(d, "missing") raises ValueError in strict mode
+        - {} -> grab(d, "missing") raises KeyError in strict mode
 
     Examples:
         grab(d, "user.name")           # Nested access

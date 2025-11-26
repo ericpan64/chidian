@@ -57,9 +57,10 @@ def _process_value(data: Any, remove_empty: bool) -> Any:
     if isinstance(data, DROP):
         raise _DropSignal(data.value)
 
-    # Handle KEEP wrapper - unwrap and mark as preserved
+    # Handle KEEP wrapper - process inner value for DROPs but preserve from empty removal
     if isinstance(data, KEEP):
-        return data.value  # Return the wrapped value as-is, skip empty check
+        # Process the inner value to handle any DROP sentinels, but skip empty removal
+        return _process_value(data.value, remove_empty=False)
 
     # Process containers recursively
     if isinstance(data, dict):
@@ -80,9 +81,17 @@ def _process_dict(d: dict, remove_empty: bool) -> dict:
     result = {}
 
     for key, value in d.items():
-        # Handle KEEP specially - preserve wrapped value
+        # Handle KEEP specially - process inner value for DROPs but preserve from empty removal
         if isinstance(value, KEEP):
-            result[key] = value.value
+            try:
+                result[key] = _process_value(value.value, remove_empty=False)
+            except _DropSignal as signal:
+                if signal.levels == 0:
+                    pass  # Remove this key
+                elif signal.levels == 1:
+                    raise _DropSignal(0)
+                else:
+                    raise _DropSignal(signal.levels - 1)
             continue
 
         try:
@@ -113,9 +122,17 @@ def _process_list(lst: list, remove_empty: bool) -> list:
     result = []
 
     for item in lst:
-        # Handle KEEP specially - preserve wrapped value
+        # Handle KEEP specially - process inner value for DROPs but preserve from empty removal
         if isinstance(item, KEEP):
-            result.append(item.value)
+            try:
+                result.append(_process_value(item.value, remove_empty=False))
+            except _DropSignal as signal:
+                if signal.levels == 0:
+                    pass  # Remove this item
+                elif signal.levels == 1:
+                    raise _DropSignal(0)
+                else:
+                    raise _DropSignal(signal.levels - 1)
             continue
 
         # Special case: DROP directly in list
@@ -124,11 +141,11 @@ def _process_list(lst: list, remove_empty: bool) -> list:
                 # Just skip this item
                 continue
             elif item == DROP.PARENT:
-                # Remove this list from its parent
-                raise _DropSignal(0)
+                # Remove this list's parent container
+                raise _DropSignal(1)
             else:
                 # GRANDPARENT or higher - propagate up
-                raise _DropSignal(item.value - 2)
+                raise _DropSignal(item.value - 1)
 
         try:
             processed = _process_value(item, remove_empty)

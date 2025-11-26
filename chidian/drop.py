@@ -114,11 +114,11 @@ def _process_list(lst: list) -> list:
                 # Just skip this item
                 continue
             elif item == DROP.PARENT:
-                # Remove this list from its parent
-                raise _DropSignal(0)
+                # Remove this list's parent container
+                raise _DropSignal(1)
             else:
                 # GRANDPARENT or higher - propagate up
-                raise _DropSignal(item.value - 2)
+                raise _DropSignal(item.value - 1)
 
         try:
             processed = _process_value(item)
