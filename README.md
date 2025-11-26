@@ -38,6 +38,54 @@ grab(d, "items[-1]")           # Negative index
 grab(d, "users[*].name")       # Map over list
 ```
 
+## `DROP` — Conditional Removal
+
+Control what gets excluded from output. `DROP` propagates upward through the structure:
+
+| Sentinel | Effect |
+|----------|--------|
+| `DROP.THIS_OBJECT` | Remove this value (or list item, or dict) |
+| `DROP.PARENT` | Remove the parent container |
+| `DROP.GRANDPARENT` | Remove two levels up |
+| `DROP.GREATGRANDPARENT` | Remove three levels up (raises if out of bounds) |
+
+```python
+from chidian import DROP, process_drops
+
+data = {
+    "kept": {"id": "123"},
+    "dropped": {
+        "trigger": DROP.THIS_OBJECT,  # This whole dict removed
+        "ignored": "never appears",
+    },
+    "items": [
+        {"bad": DROP.PARENT, "also_ignored": "x"},  # Removes entire list
+        {"good": "value"},
+    ],
+}
+
+result = process_drops(data)
+# Result: {"kept": {"id": "123"}}
+```
+
+**In lists**, `DROP.THIS_OBJECT` removes just that item:
+
+```python
+from chidian import DROP, process_drops
+
+data = {
+    "tags": [
+        "first_kept",
+        DROP.THIS_OBJECT,  # Removed
+        "third_kept",
+        {"nested": DROP.THIS_OBJECT},  # Entire dict removed
+    ],
+}
+
+result = process_drops(data)
+# Result: {"tags": ["first_kept", "third_kept"]}
+```
+
 ## Design Philosophy
 
 Built by data engineers, for data engineers. chidian solves common pain points:
