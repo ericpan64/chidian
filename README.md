@@ -9,7 +9,15 @@
 ## Quick Start
 
 ```python
-from chidian import grab
+from chidian import mapper, grab
+
+@mapper
+def patient_summary(d):
+    return {
+        "patient_id": grab(d, "data.patient.id"),
+        "is_active": grab(d, "data.patient.active"),
+        "latest_visit": grab(d, "data.visits[0].date"),
+    }
 
 source = {
     "data": {
@@ -21,10 +29,45 @@ source = {
     }
 }
 
-# Extract values using path notation
-patient_id = grab(source, "data.patient.id")        # "p-123"
-is_active = grab(source, "data.patient.active")     # True
-latest_visit = grab(source, "data.visits[0].date")  # "2024-01-15"
+result = patient_summary(source)
+# {"patient_id": "p-123", "is_active": True, "latest_visit": "2024-01-15"}
+```
+
+## Core Idea
+
+Write your mapping as the dict you want back:
+
+```python
+from chidian import mapper, grab, DROP, KEEP
+
+@mapper
+def normalize_user(d):
+    return {
+        # Static values — just write them
+        "version": "2.0",
+
+        # Pull from source
+        "name": grab(d, "user.name"),
+
+        # Nested output — nest your mapping
+        "address": {
+            "city": grab(d, "location.city"),
+            "zip": grab(d, "location.postal"),
+        },
+
+        # Conditionally drop
+        "risky_field": DROP.THIS_OBJECT if not grab(d, "verified") else grab(d, "data"),
+    }
+```
+
+Decorated functions are shareable, testable, and composable:
+
+```python
+# Import and use directly
+from myproject.mappings import normalize_user, patient_summary
+
+# Chain mappings
+result = patient_summary(normalize_user(raw_data))
 ```
 
 ## `grab(data, path)`
@@ -50,39 +93,37 @@ Control what gets excluded from output. `DROP` propagates upward through the str
 | `DROP.GREATGRANDPARENT` | Remove three levels up (raises if out of bounds) |
 
 ```python
-from chidian import DROP, process_output
+@mapper
+def with_drops(d):
+    return {
+        "kept": {"id": grab(d, "data.patient.id")},
+        "dropped": {
+            "trigger": DROP.THIS_OBJECT,  # This whole dict removed
+            "ignored": "never appears",
+        },
+        "items": [
+            {"bad": DROP.PARENT, "also_ignored": "x"},  # Removes entire list
+            {"good": "value"},
+        ],
+    }
 
-data = {
-    "kept": {"id": "123"},
-    "dropped": {
-        "trigger": DROP.THIS_OBJECT,  # This whole dict removed
-        "ignored": "never appears",
-    },
-    "items": [
-        {"bad": DROP.PARENT, "also_ignored": "x"},  # Removes entire list
-        {"good": "value"},
-    ],
-}
-
-result = process_output(data)
-# Result: {"kept": {"id": "123"}}
+# Result: {"kept": {"id": "..."}}
 ```
 
 **In lists**, `DROP.THIS_OBJECT` removes just that item:
 
 ```python
-from chidian import DROP, process_output
+@mapper
+def filter_list(d):
+    return {
+        "tags": [
+            "first_kept",
+            DROP.THIS_OBJECT,  # Removed
+            "third_kept",
+            {"nested": DROP.THIS_OBJECT},  # Entire dict removed
+        ],
+    }
 
-data = {
-    "tags": [
-        "first_kept",
-        DROP.THIS_OBJECT,  # Removed
-        "third_kept",
-        {"nested": DROP.THIS_OBJECT},  # Entire dict removed
-    ],
-}
-
-result = process_output(data)
 # Result: {"tags": ["first_kept", "third_kept"]}
 ```
 
@@ -91,29 +132,30 @@ result = process_output(data)
 By default, empty values (`{}`, `[]`, `""`, `None`) are removed. Wrap with `KEEP()` to preserve them:
 
 ```python
-from chidian import KEEP, process_output
+from chidian import KEEP
 
-data = {
-    "explicit_empty": KEEP({}),      # Preserved as {}
-    "explicit_none": KEEP(None),     # Preserved as None
-    "implicit_empty": {},            # Removed by default
-    "normal_value": "hello",
-}
+@mapper
+def with_empties(d):
+    return {
+        "explicit_empty": KEEP({}),      # Preserved as {}
+        "explicit_none": KEEP(None),     # Preserved as None
+        "implicit_empty": {},            # Removed by default
+        "normal_value": "hello",
+    }
 
-result = process_output(data)
 # Result: {"explicit_empty": {}, "explicit_none": None, "normal_value": "hello"}
 ```
 
-## `process_output` Options
+## Decorator Options
 
 ```python
-from chidian import process_output
-
-# Default: remove empty values
-process_output(data)
-
-# Keep all empty values
-process_output(data, remove_empty=False)
+@mapper(remove_empty=False)
+def keep_all_empties(d):
+    return {
+        "empty_dict": {},   # Kept
+        "empty_list": [],   # Kept
+        "none_val": None,   # Kept
+    }
 ```
 
 ## Design Philosophy
