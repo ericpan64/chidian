@@ -1,48 +1,59 @@
 """
-Core get/put functions for chidian data traversal and mutation.
+Core grab function for chidian data traversal.
 """
 
-import copy
 from typing import Any, Callable
 
-from .lib.core_helpers import (
-    apply_functions,
-    mutate_path,
-    traverse_path,
-    validate_mutation_path,
-)
+from .context import is_strict
+from .lib.core_helpers import apply_functions, traverse_path
 from .lib.parser import parse_path
 
 
-def get(
+def grab(
     source: dict | list,
-    key: str,
+    path: str,
     default: Any = None,
     apply: Callable | list[Callable] | None = None,
-    strict: bool = False,
 ) -> Any:
     """
     Extract values from nested data structures using path notation.
 
     Args:
         source: Source data to traverse
-        key: Path string (e.g., "data.items[0].name")
+        path: Path string (e.g., "data.items[0].name")
         default: Default value if path not found
         apply: Function(s) to apply to the result
-        strict: If True, raise errors on missing paths
 
     Returns:
         Value at path or default if not found
+
+    Raises:
+        KeyError: In strict mode, if a dict key is not found
+        IndexError: In strict mode, if a list index is out of range
+        TypeError: In strict mode, if a type mismatch occurs during traversal
+
+    Note:
+        Strict mode distinguishes between "key not found" and "key exists with None":
+        - {"has_none": None} -> grab(d, "has_none") returns None (OK in strict mode)
+        - {} -> grab(d, "missing") raises KeyError in strict mode
+
+    Examples:
+        grab(d, "user.name")           # Nested access
+        grab(d, "items[0]")            # List index
+        grab(d, "items[-1]")           # Negative index
+        grab(d, "users[*].name")       # Map over list
     """
+    strict = is_strict()
+
     try:
-        path = parse_path(key)
+        parsed = parse_path(path)
     except ValueError as e:
         if strict:
-            raise ValueError(f"Invalid path syntax: {key}") from e
+            raise ValueError(f"Invalid path syntax: {path}") from e
         return default
 
     try:
-        result = traverse_path(source, path, strict=strict)
+        result = traverse_path(source, parsed, strict=strict)
     except Exception:
         if strict:
             raise
@@ -55,47 +66,5 @@ def get(
     # Apply functions if provided
     if apply is not None and result is not None:
         result = apply_functions(result, apply)
-
-    return result
-
-
-def put(
-    target: Any,
-    path: str,
-    value: Any,
-    strict: bool = False,
-) -> Any:
-    """
-    Set a value in a nested data structure, creating containers as needed.
-
-    Args:
-        target: Target data structure to modify
-        path: Path string (e.g., "data.items[0].name")
-        value: Value to set
-        strict: If True, raise errors on invalid operations
-
-    Returns:
-        Modified copy of the target data
-    """
-    try:
-        parsed_path = parse_path(path)
-    except ValueError as e:
-        raise ValueError(f"Invalid path syntax: {path}") from e
-
-    # Validate path for mutation
-    if not validate_mutation_path(parsed_path):
-        if strict:
-            raise ValueError(f"Invalid mutation path: {path}")
-        return target
-
-    # Deep copy for copy-on-write semantics
-    result = copy.deepcopy(target)
-
-    try:
-        mutate_path(result, parsed_path, value, strict=strict)
-    except Exception:
-        if strict:
-            raise
-        return target
 
     return result

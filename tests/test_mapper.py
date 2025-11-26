@@ -1,419 +1,376 @@
-"""Tests for Mapper as independent dict->dict transformer and validation engine."""
-
-from typing import Any
+"""Tests for the @mapper decorator and related functionality."""
 
 import pytest
-from pydantic import BaseModel
 
-import chidian.partials as p
-from chidian import Mapper, MapperResult, ValidationMode, get
+from chidian import DROP, KEEP, grab, mapper, mapping_context
 
 
 class TestMapperBasic:
-    """Test basic Mapper functionality as dict->dict transformer."""
+    """Test basic @mapper decorator functionality."""
 
-    def test_simple_dict_mapping(self) -> None:
-        """Test basic Mapper with dict mapping."""
-        mapping = {
-            "patient_id": p.get("data.patient.id"),
-            "is_active": p.get("data.patient.active"),
-        }
-        mapper: Mapper[Any] = Mapper(mapping)
+    def test_simple_mapping(self):
+        """Test basic mapper with grab."""
 
-        input_data = {
-            "data": {"patient": {"id": "abc123", "active": True}, "other": "value"}
-        }
+        @mapper
+        def patient_summary(d):
+            return {
+                "patient_id": grab(d, "data.patient.id"),
+                "is_active": grab(d, "data.patient.active"),
+            }
 
-        result = mapper(input_data)
+        source = {"data": {"patient": {"id": "p-123", "active": True}}}
+        result = patient_summary(source)
 
-        assert isinstance(result, dict)
-        assert result["patient_id"] == "abc123"  # type: ignore[index]
-        assert result["is_active"] is True  # type: ignore[index]
+        assert result == {"patient_id": "p-123", "is_active": True}
 
-    def test_callable_mapping(self) -> None:
-        """Test Mapper with callable mapping values."""
-        mapping = {
-            "patient_id": lambda data: get(data, "data.patient.id"),
-            "is_active": lambda data: get(data, "data.patient.active"),
-            "status": lambda data: "processed",
-        }
+    def test_nested_output(self):
+        """Test mapper with nested output structure."""
 
-        mapper: Mapper[Any] = Mapper(mapping)
+        @mapper
+        def with_nested(d):
+            return {
+                "patient": {
+                    "id": grab(d, "data.id"),
+                    "name": grab(d, "data.name"),
+                },
+                "meta": {"version": "1.0"},
+            }
 
-        input_data = {
-            "data": {"patient": {"id": "abc123", "active": True}, "other": "value"}
-        }
+        source = {"data": {"id": "123", "name": "John"}}
+        result = with_nested(source)
 
-        result = mapper(input_data)
-
-        assert isinstance(result, dict)
-        assert result["patient_id"] == "abc123"  # type: ignore[index]
-        assert result["is_active"] is True  # type: ignore[index]
-        assert result["status"] == "processed"  # type: ignore[index]
-
-    def test_callable_mapping_with_partials(self) -> None:
-        """Test Mapper with callable mapping values using simplified partials API."""
-        # Use simplified partials API
-        get_first = p.get("firstName")
-        get_last = p.get("lastName")
-
-        # Status mapping function
-        def status_transform(data: dict) -> str:
-            status_map = {"active": "✓ Active", "inactive": "✗ Inactive"}
-            status_value = get(data, "status", default="unknown")
-            return status_map.get(status_value, "Unknown")
-
-        # Name concatenation function
-        def full_name_transform(data: dict) -> str:
-            first_name = get_first(data) or ""
-            last_name = get_last(data) or ""
-            return f"{first_name} {last_name}".strip()
-
-        # Codes joining function
-        def codes_transform(data: dict) -> str:
-            codes = get(data, "codes", default=[])
-            return ", ".join(str(c) for c in codes) if codes else ""
-
-        # Backup name function
-        def backup_name_transform(data: dict) -> str:
-            return get(data, "nickname") or get(data, "firstName") or "Guest"
-
-        mapping = {
-            "name": full_name_transform,
-            "status_display": status_transform,
-            "all_codes": codes_transform,
-            "city": p.get("address") | p.split("|") | p.at_index(1),
-            "backup_name": backup_name_transform,
+        assert result == {
+            "patient": {"id": "123", "name": "John"},
+            "meta": {"version": "1.0"},
         }
 
-        mapper: Mapper[Any] = Mapper(mapping)
+    def test_static_values(self):
+        """Test mapper with static values."""
 
-        input_data = {
-            "firstName": "John",
-            "lastName": "Doe",
-            "status": "active",
-            "codes": ["A", "B", "C"],
-            "address": "123 Main St|Boston|02101",
-        }
+        @mapper
+        def with_static(d):
+            return {
+                "version": "2.0",
+                "type": "patient",
+                "id": grab(d, "id"),
+            }
 
-        result = mapper(input_data)
+        result = with_static({"id": "123"})
+        assert result == {"version": "2.0", "type": "patient", "id": "123"}
 
-        assert isinstance(result, dict)
-        assert result["name"] == "John Doe"  # type: ignore[index]
-        assert result["status_display"] == "✓ Active"  # type: ignore[index]
-        assert result["all_codes"] == "A, B, C"  # type: ignore[index]
-        assert result["city"] == "Boston"  # type: ignore[index]
-        assert result["backup_name"] == "John"  # type: ignore[index]
+    def test_composable_mappers(self):
+        """Test that mappers can be composed."""
+
+        @mapper
+        def first_transform(d):
+            return {"data": {"id": grab(d, "raw_id")}}
+
+        @mapper
+        def second_transform(d):
+            return {"patient_id": grab(d, "data.id")}
+
+        source = {"raw_id": "123"}
+        result = second_transform(first_transform(source))
+
+        assert result == {"patient_id": "123"}
 
 
-class TestMapperMapping:
-    """Test Mapper mapping functionality."""
+class TestDrop:
+    """Test DROP sentinel functionality."""
 
-    def test_mapper_with_invalid_mapping(self) -> None:
-        """Test that Mapper rejects invalid mapping types."""
-        with pytest.raises(TypeError):
-            Mapper(123)  # type: ignore  # Invalid type
+    def test_drop_this_object_in_dict(self):
+        """Test DROP.THIS_OBJECT removes the containing dict."""
 
-        with pytest.raises(TypeError):
-            Mapper("not a mapping")  # type: ignore  # Invalid type
+        @mapper
+        def with_drop(d):
+            return {
+                "kept": {"id": grab(d, "id")},
+                "dropped": {"trigger": DROP.THIS_OBJECT, "ignored": "x"},
+            }
 
-        with pytest.raises(TypeError):
-            Mapper(lambda x: x)  # type: ignore  # Callable not allowed
+        result = with_drop({"id": "123"})
+        assert result == {"kept": {"id": "123"}}
 
-    def test_mapper_with_dict_mapping_containing_callable(self) -> None:
-        """Test Mapper with dict mapping containing callable values."""
-        mapping = {
-            "simple": p.get("path.to.value"),
-            "transformed": lambda data: data.get("value", "").upper(),
-            "partial": p.get("nested.value") | p.upper,
-        }
-        mapper: Mapper[Any] = Mapper(mapping)
+    def test_drop_this_object_in_list(self):
+        """Test DROP.THIS_OBJECT in list removes just that item."""
 
-        input_data = {
-            "path": {"to": {"value": "hello"}},
-            "value": "world",
-            "nested": {"value": "test"},
-        }
+        @mapper
+        def filter_list(d):
+            return {
+                "tags": [
+                    "first",
+                    DROP.THIS_OBJECT,
+                    "third",
+                ]
+            }
 
-        result = mapper(input_data)
+        result = filter_list({})
+        assert result == {"tags": ["first", "third"]}
 
-        assert result["simple"] == "hello"  # type: ignore[index]
-        assert result["transformed"] == "WORLD"  # type: ignore[index]
-        assert result["partial"] == "TEST"  # type: ignore[index]
+    def test_drop_nested_dict_in_list(self):
+        """Test DROP.THIS_OBJECT in nested dict removes the dict from list."""
 
-    def test_mapper_error_handling(self) -> None:
-        """Test Mapper error handling."""
+        @mapper
+        def filter_list(d):
+            return {
+                "items": [
+                    {"keep": "me"},
+                    {"drop": DROP.THIS_OBJECT, "ignored": "x"},
+                    {"also": "kept"},
+                ]
+            }
 
-        def failing_mapper(data: dict) -> str:
-            raise ValueError("Test error")
+        result = filter_list({})
+        assert result == {"items": [{"keep": "me"}, {"also": "kept"}]}
 
-        mapping: dict[str, Any] = {"result": failing_mapper}
-        mapper: Mapper[Any] = Mapper(mapping)
+    def test_drop_parent(self):
+        """Test DROP.PARENT removes the parent container."""
 
-        with pytest.raises(ValueError, match="Test error"):
-            mapper({"test": "data"})
+        @mapper
+        def with_parent_drop(d):
+            return {
+                "kept": {"id": "123"},
+                "items": [
+                    {"trigger": DROP.PARENT},
+                    {"ignored": "never seen"},
+                ],
+            }
 
-    def test_mapper_with_empty_mapping(self) -> None:
-        """Test Mapper with empty mapping."""
-        mapper: Mapper[Any] = Mapper({})
-        result = mapper({"input": "data"})
+        result = with_parent_drop({})
+        assert result == {"kept": {"id": "123"}}
+
+    def test_drop_grandparent(self):
+        """Test DROP.GRANDPARENT removes two levels up."""
+
+        @mapper
+        def with_grandparent_drop(d):
+            return {
+                "outer": {
+                    "middle": {"trigger": DROP.GRANDPARENT},
+                }
+            }
+
+        result = with_grandparent_drop({})
         assert result == {}
 
-    def test_mapper_with_constant_values(self) -> None:
-        """Test Mapper with constant string and other values."""
-        mapping = {
-            "constant_string": "Hello, World!",
-            "constant_number": 42,
-            "constant_bool": True,
-            "constant_none": None,
-            "dynamic_value": p.get("input.value"),
-        }
-        mapper: Mapper[Any] = Mapper(mapping)
+    def test_drop_conditional(self):
+        """Test conditional DROP based on data."""
 
-        input_data = {"input": {"value": "dynamic"}, "ignored": "data"}
-        result = mapper(input_data)
-
-        assert result["constant_string"] == "Hello, World!"  # type: ignore[index]
-        assert result["constant_number"] == 42  # type: ignore[index]
-        assert result["constant_bool"] is True  # type: ignore[index]
-        assert result["constant_none"] is None  # type: ignore[index]
-        assert result["dynamic_value"] == "dynamic"  # type: ignore[index]
-
-    def test_mapper_preserves_dict_structure(self) -> None:
-        """Test that Mapper preserves nested dict structure in results."""
-        # Note: Mapper only supports flat dictionaries, not nested output structures
-        # To achieve nested results, use callables that return nested dicts
-
-        def nested_transform(data: dict) -> dict:
-            return {"deep": get(data, "another.path"), "value": "direct_value"}
-
-        mapping = {
-            "flat": p.get("simple.value"),
-            "nested": nested_transform,
-        }
-
-        mapper: Mapper[Any] = Mapper(mapping)
-
-        input_data = {"simple": {"value": "test"}, "another": {"path": "nested_test"}}
-
-        result = mapper(input_data)
-
-        assert result["flat"] == "test"  # type: ignore[index]
-        assert result["nested"]["deep"] == "nested_test"  # type: ignore[index]
-        assert result["nested"]["value"] == "direct_value"  # type: ignore[index]
-
-
-class TestMapperCalling:
-    """Test Mapper calling interface."""
-
-    def test_mapper_callable_interface(self) -> None:
-        """Test that Mapper can be called directly."""
-        mapping = {"output": p.get("input")}
-        mapper: Mapper[Any] = Mapper(mapping)
-
-        input_data = {"input": "test_value"}
-        result = mapper(input_data)
-
-        assert result["output"] == "test_value"  # type: ignore[index]
-
-    def test_mapper_callable_only(self) -> None:
-        """Test that Mapper only has __call__ method (no forward method)."""
-        mapping = {"output": p.get("input")}
-        mapper: Mapper[Any] = Mapper(mapping)
-
-        input_data = {"input": "test_value"}
-
-        # Should work with __call__
-        result = mapper(input_data)
-        assert result == {"output": "test_value"}
-
-        # Should not have forward method
-        assert not hasattr(mapper, "forward")
-
-    def test_mapper_no_reverse(self) -> None:
-        """Test that Mapper doesn't support reverse operations."""
-        mapping = {"output": p.get("input")}
-        mapper: Mapper[Any] = Mapper(mapping)
-
-        # Should not have reverse method
-        assert not hasattr(mapper, "reverse")
-
-        # Should not have can_reverse method
-        assert not hasattr(mapper, "can_reverse")
-
-
-class TestMapperNewSyntax:
-    """Test Mapper with new ergonomic syntax from README."""
-
-    def test_readme_example(self) -> None:
-        """Test the exact example from README with new syntax."""
-        from pydantic import BaseModel
-
-        source_data = {
-            "name": {
-                "first": "Gandalf",
-                "given": ["the", "Grey"],
-                "suffix": None,
-            },
-            "address": {
-                "street": ["Bag End", "Hobbiton"],
-                "city": "The Shire",
-                "postal_code": "ME001",
-                "country": "Middle Earth",
-            },
-        }
-
-        class SourceSchema(BaseModel):
-            name: dict
-            address: dict
-
-        class TargetSchema(BaseModel):
-            full_name: str
-            address: str
-
-        person_mapping = Mapper(
-            {
-                "full_name": p.get(
-                    [
-                        "name.first",
-                        "name.given[*]",
-                        "name.suffix",
-                    ]
-                ).join(" ", flatten=True),
-                "address": p.get(
-                    [
-                        "address.street[*]",
-                        "address.city",
-                        "address.postal_code",
-                        "address.country",
-                    ]
-                ).join("\n", flatten=True),
-            },
-            min_input_schemas=[SourceSchema],
-            output_schema=TargetSchema,
-        )
-
-        source_obj = SourceSchema(**source_data)
-        result = person_mapping(source_obj)
-
-        assert isinstance(result, TargetSchema)
-        assert result.full_name == "Gandalf the Grey"
-        assert result.address == "Bag End\nHobbiton\nThe Shire\nME001\nMiddle Earth"
-
-
-class TestMapperWithValidation:
-    """Test Mapper functionality with validation modes."""
-
-    def test_mapper_backward_compatibility(self) -> None:
-        """Test that Mapper maintains backward compatibility with dict."""
-        # Old-style dict mapping should still work
-        mapper: Mapper[Any] = Mapper({"output": p.get("input")})
-        result = mapper({"input": "test"})
-        assert result == {"output": "test"}
-
-    def test_mapper_with_data_mapping_strict(self) -> None:
-        """Test Mapper with schema validation in strict mode."""
-
-        class InputModel(BaseModel):
-            name: str
-            age: int
-
-        class OutputModel(BaseModel):
-            display_name: str
-            age_group: str
-
-        mapper = Mapper(
-            transformations={
-                "display_name": p.get("name") | p.upper,
-                "age_group": lambda d: "adult" if d.get("age", 0) >= 18 else "child",
-            },
-            min_input_schemas=[InputModel],
-            output_schema=OutputModel,
-            mode=ValidationMode.STRICT,
-        )
-
-        # Valid input
-        result = mapper({"name": "John", "age": 25})
-        assert isinstance(result, OutputModel)
-        assert result.display_name == "JOHN"
-        assert result.age_group == "adult"
-
-        # Invalid input no longer raises (input validation removed)
-        # but output validation will fail due to missing field transformation
-        result2 = mapper({"name": "John", "age": 10})
-        assert isinstance(result2, OutputModel)
-        assert result2.age_group == "child"
-
-    def test_mapper_with_data_mapping_flexible(self) -> None:
-        """Test Mapper with schema validation in flexible mode."""
-
-        class InputModel(BaseModel):
-            name: str
-            age: int
-
-        class OutputModel(BaseModel):
-            display_name: str
-            age_group: str
-
-        mapper = Mapper(
-            transformations={
-                "display_name": p.get("name") | p.upper,
-                "age_group": lambda d: "adult" if d.get("age", 0) >= 18 else "child",
-            },
-            min_input_schemas=[InputModel],
-            output_schema=OutputModel,
-            mode=ValidationMode.FLEXIBLE,
-        )
-
-        # Valid input
-        result = mapper({"name": "John", "age": 25})
-        assert isinstance(result, MapperResult)
-        assert not result.has_issues
-        assert isinstance(result.data, OutputModel)
-        assert result.data.display_name == "JOHN"
-
-        # Invalid input no longer causes input validation issues
-        # but missing transformation data causes output issues
-        result = mapper({"name": "John"})  # Missing age
-        assert isinstance(result, MapperResult)
-        # Since age is missing, age_group becomes "child" (default 0 < 18)
-        assert isinstance(result.data, OutputModel)
-        assert result.data.age_group == "child"
-
-    def test_mapper_auto_mode(self) -> None:
-        """Test Mapper auto mode selection."""
-        # With schemas -> strict
-        mapper_with_schemas: Mapper[BaseModel] = Mapper(
-            transformations={"out": p.get("in")},
-            min_input_schemas=[BaseModel],
-            output_schema=BaseModel,
-        )
-        assert mapper_with_schemas.mode == ValidationMode.STRICT
-
-        # Without schemas -> flexible
-        mapper_no_schemas: Mapper[Any] = Mapper(transformations={"out": p.get("in")})
-        assert mapper_no_schemas.mode == ValidationMode.FLEXIBLE
-
-    def test_mapper_with_pure_transformation(self) -> None:
-        """Test Mapper without schemas."""
-        mapper: Mapper[Any] = Mapper(
-            transformations={
-                "id": p.get("patient.id"),
-                "name": p.get("patient.name"),
-                "provider": p.get("provider.name", default="Unknown"),
-            },
-            mode=ValidationMode.FLEXIBLE,
-        )
-
-        result = mapper(
-            {
-                "patient": {"id": "123", "name": "John"},
-                "provider": {"name": "Dr. Smith"},
+        @mapper
+        def conditional_drop(d):
+            verified = grab(d, "verified")
+            return {
+                "id": grab(d, "id"),
+                # Use nested dict so DROP.THIS_OBJECT removes only "sensitive" key
+                "sensitive": {
+                    "data": DROP.THIS_OBJECT if not verified else grab(d, "data"),
+                },
             }
-        )
 
-        # Without schemas, returns dict directly
-        assert isinstance(result, dict)
-        assert result["id"] == "123"
-        assert result["name"] == "John"
-        assert result["provider"] == "Dr. Smith"
+        # Not verified - sensitive dict is dropped (contains DROP)
+        result = conditional_drop({"id": "123", "verified": False, "data": "secret"})
+        assert result == {"id": "123"}
+
+        # Verified - sensitive is kept
+        result = conditional_drop({"id": "123", "verified": True, "data": "secret"})
+        assert result == {"id": "123", "sensitive": {"data": "secret"}}
+
+
+class TestKeep:
+    """Test KEEP wrapper functionality."""
+
+    def test_keep_empty_dict(self):
+        """Test KEEP preserves empty dict."""
+
+        @mapper
+        def with_keep(d):
+            return {
+                "explicit_empty": KEEP({}),
+                "implicit_empty": {},
+            }
+
+        result = with_keep({})
+        assert result == {"explicit_empty": {}}
+
+    def test_keep_none(self):
+        """Test KEEP preserves None."""
+
+        @mapper
+        def with_keep(d):
+            return {
+                "explicit_none": KEEP(None),
+                "implicit_none": None,
+            }
+
+        result = with_keep({})
+        assert result == {"explicit_none": None}
+
+    def test_keep_empty_list(self):
+        """Test KEEP preserves empty list."""
+
+        @mapper
+        def with_keep(d):
+            return {
+                "explicit_empty": KEEP([]),
+                "implicit_empty": [],
+            }
+
+        result = with_keep({})
+        assert result == {"explicit_empty": []}
+
+    def test_keep_empty_string(self):
+        """Test KEEP preserves empty string."""
+
+        @mapper
+        def with_keep(d):
+            return {
+                "explicit_empty": KEEP(""),
+                "implicit_empty": "",
+            }
+
+        result = with_keep({})
+        assert result == {"explicit_empty": ""}
+
+
+class TestEmptyRemoval:
+    """Test automatic empty value removal."""
+
+    def test_empty_values_removed_by_default(self):
+        """Test empty values are removed by default."""
+
+        @mapper
+        def with_empties(d):
+            return {
+                "kept": "value",
+                "empty_dict": {},
+                "empty_list": [],
+                "empty_string": "",
+                "none_value": None,
+            }
+
+        result = with_empties({})
+        assert result == {"kept": "value"}
+
+    def test_remove_empty_false(self):
+        """Test remove_empty=False keeps all values."""
+
+        @mapper(remove_empty=False)
+        def keep_empties(d):
+            return {
+                "kept": "value",
+                "empty_dict": {},
+                "empty_list": [],
+                "none_value": None,
+            }
+
+        result = keep_empties({})
+        assert result == {
+            "kept": "value",
+            "empty_dict": {},
+            "empty_list": [],
+            "none_value": None,
+        }
+
+
+class TestMappingContext:
+    """Test mapping_context strict mode."""
+
+    def test_normal_mode_missing_keys(self):
+        """Test missing keys return None in normal mode."""
+
+        @mapper
+        def test_mapping(d):
+            return {
+                "exists": grab(d, "data.id"),
+                "missing": grab(d, "does.not.exist"),
+            }
+
+        result = test_mapping({"data": {"id": "123"}})
+        assert result == {"exists": "123"}  # 'missing' removed as None
+
+    def test_strict_mode_raises_on_missing(self):
+        """Test strict mode raises on missing keys."""
+
+        @mapper
+        def test_mapping(d):
+            return {
+                "exists": grab(d, "data.id"),
+                "missing": grab(d, "does.not.exist"),
+            }
+
+        with pytest.raises(KeyError):
+            with mapping_context(strict=True):
+                test_mapping({"data": {"id": "123"}})
+
+    def test_strict_mode_allows_existing_none(self):
+        """Test strict mode allows keys that exist with None value."""
+
+        @mapper(remove_empty=False)
+        def test_mapping(d):
+            return {
+                "has_none": grab(d, "value"),
+            }
+
+        source = {"value": None}
+        with mapping_context(strict=True):
+            result = test_mapping(source)
+
+        assert result == {"has_none": None}
+
+
+class TestReadmeExamples:
+    """Test examples from the README."""
+
+    def test_quick_start_example(self):
+        """Test the quick start example."""
+
+        @mapper
+        def patient_summary(d):
+            return {
+                "patient_id": grab(d, "data.patient.id"),
+                "is_active": grab(d, "data.patient.active"),
+                "latest_visit": grab(d, "data.visits[0].date"),
+            }
+
+        source = {
+            "data": {
+                "patient": {"id": "p-123", "active": True},
+                "visits": [
+                    {"date": "2024-01-15", "type": "checkup"},
+                    {"date": "2024-02-20", "type": "followup"},
+                ],
+            }
+        }
+
+        result = patient_summary(source)
+        assert result == {
+            "patient_id": "p-123",
+            "is_active": True,
+            "latest_visit": "2024-01-15",
+        }
+
+    def test_normalize_user_example(self):
+        """Test the normalize_user example pattern."""
+
+        @mapper
+        def normalize_user(d):
+            return {
+                "version": "2.0",
+                "name": grab(d, "user.name"),
+                "address": {
+                    "city": grab(d, "location.city"),
+                    "zip": grab(d, "location.postal"),
+                },
+            }
+
+        source = {
+            "user": {"name": "John"},
+            "location": {"city": "Boston", "postal": "02101"},
+        }
+
+        result = normalize_user(source)
+        assert result == {
+            "version": "2.0",
+            "name": "John",
+            "address": {"city": "Boston", "zip": "02101"},
+        }

@@ -1,129 +1,288 @@
-# chidian - <ins alt="chi">chi</ins>meric <ins alt="d̲">d</ins>ata <ins alt="i̲">i</ins>nterch<ins alt="a̲n̲">an</ins>ge
+# chidian
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> Declarative, type-safe data mapping for savvy data engineers
+> Dict-to-dict data mappings that look like dicts
 
-**chidian** is a composable framework for building readable data transformations with **Pydantic v2**.
+**chidian** lets you write data transformations as plain dictionaries. Your mapping *looks like* your output.
 
 ## Quick Start
-```python
-from pydantic import BaseModel
-from chidian import Mapper
-import chidian.partials as p
 
-# Source data (nested)
-source_data = {
-    "name": {"first": "Gandalf", "given": ["the", "Grey"], "suffix": None},
-    "address": {
-        "street": ["Bag End", "Hobbiton"],
-        "city": "The Shire",
-        "postal_code": "ME001",
-        "country": "Middle Earth"
+```python
+from chidian import mapper, grab
+
+@mapper
+def patient_summary(d):
+    return {
+        "patient_id": grab(d, "data.patient.id"),
+        "is_active": grab(d, "data.patient.active"),
+        "latest_visit": grab(d, "data.visits[0].date"),
+    }
+
+source = {
+    "data": {
+        "patient": {"id": "p-123", "active": True},
+        "visits": [
+            {"date": "2024-01-15", "type": "checkup"},
+            {"date": "2024-02-20", "type": "followup"}
+        ]
     }
 }
 
-# Target data (flat)
-target = {
-    "full_name": "Gandalf the Grey",
-    "address": "Bag End\nHobbiton\nThe Shire\nME001\nMiddle Earth"
+result = patient_summary(source)
+# {"patient_id": "p-123", "is_active": True, "latest_visit": "2024-01-15"}
+```
+
+## Core Idea
+
+Write your mapping as the dict you want back:
+
+```python
+from chidian import mapper, grab, DROP, KEEP
+
+@mapper
+def normalize_user(d):
+    return {
+        # Static values — just write them
+        "version": "2.0",
+
+        # Pull from source
+        "name": grab(d, "user.name"),
+
+        # Nested output — nest your mapping
+        "address": {
+            "city": grab(d, "location.city"),
+            "zip": grab(d, "location.postal"),
+        },
+
+        # Conditionally drop
+        "risky_field": DROP.THIS_OBJECT if not grab(d, "verified") else grab(d, "data"),
+    }
+```
+
+Decorated functions are shareable, testable, and composable:
+
+```python
+# Import and use in your codebase
+from myproject.mappings import normalize_user
+
+result = normalize_user(raw_data)
+```
+
+## `grab(data, path)`
+
+Extract values using dot notation and bracket indexing:
+
+```python
+grab(d, "user.name")           # Nested access
+grab(d, "items[0]")            # List index
+grab(d, "items[-1]")           # Negative index
+grab(d, "users[*].name")       # Map over list
+```
+
+## `DROP` — Conditional Removal
+
+Control what gets excluded from output. `DROP` propagates upward through the structure:
+
+| Sentinel | Effect |
+|----------|--------|
+| `DROP.THIS_OBJECT` | Remove this value (or list item, or dict) |
+| `DROP.PARENT` | Remove the parent container |
+| `DROP.GRANDPARENT` | Remove two levels up |
+| `DROP.GREATGRANDPARENT` | Remove three levels up (raises if out of bounds) |
+
+```python
+@mapper
+def with_drops(d):
+    return {
+        "kept": {"id": grab(d, "data.patient.id")},
+        "dropped": {
+            "trigger": DROP.THIS_OBJECT,  # This whole dict removed
+            "ignored": "never appears",
+        },
+        "items": [
+            {"bad": DROP.PARENT, "also_ignored": "x"},  # Removes entire list
+            {"good": "value"},
+        ],
+    }
+
+# Result: {"kept": {"id": "..."}}
+```
+
+**In lists**, `DROP.THIS_OBJECT` removes just that item:
+
+```python
+@mapper
+def filter_list(d):
+    return {
+        "tags": [
+            "first_kept",
+            DROP.THIS_OBJECT,  # Removed
+            "third_kept",
+            {"nested": DROP.THIS_OBJECT},  # Entire dict removed
+        ],
+    }
+
+# Result: {"tags": ["first_kept", "third_kept"]}
+```
+
+## `KEEP` — Preserve Empty Values
+
+By default, empty values (`{}`, `[]`, `""`, `None`) are removed. Wrap with `KEEP()` to preserve them:
+
+```python
+from chidian import KEEP
+
+@mapper
+def with_empties(d):
+    return {
+        "explicit_empty": KEEP({}),      # Preserved as {}
+        "explicit_none": KEEP(None),     # Preserved as None
+        "implicit_empty": {},            # Removed by default
+        "normal_value": "hello",
+    }
+
+# Result: {"explicit_empty": {}, "explicit_none": None, "normal_value": "hello"}
+```
+
+## Decorator Options
+
+```python
+@mapper(remove_empty=False)
+def keep_all_empties(d):
+    return {
+        "empty_dict": {},   # Kept
+        "empty_list": [],   # Kept
+        "none_val": None,   # Kept
+    }
+```
+
+## Strict Mode
+
+Catch missing keys during development:
+
+```python
+from chidian import mapper, grab, mapping_context
+
+@mapper
+def risky_mapping(d):
+    return {
+        "id": grab(d, "data.patient.id"),
+        "missing": grab(d, "key.not.found"),  # Doesn't exist
+    }
+
+# Normal — missing keys become empty/removed
+result = risky_mapping(source)
+
+# Strict — raises KeyError on missing keys
+with mapping_context(strict=True):
+    risky_mapping(source)  # KeyError!
+```
+
+**Note**: Strict mode distinguishes between "key not found" and "key exists with `None` value":
+
+```python
+source = {"has_none": None}
+
+@mapper
+def check_none(d):
+    return {
+        "explicit_none": grab(d, "has_none"),      # OK — key exists, value is None
+        "missing": grab(d, "does.not.exist"),      # Raises in strict mode
+    }
+```
+
+## Validation
+
+chidian includes a dict-like validation DSL that mirrors your data structure:
+
+```python
+from chidian.validation import Required, Optional, validate, to_pydantic, Gte, InSet
+
+schema = {
+    "name": Required(str),
+    "email": Optional(str),
+    "age": int & Gte(0),
+    "role": InSet({"admin", "user"}),
+    "tags": [str],
+    "profile": {
+        "bio": Optional(str),
+        "avatar_url": str,
+    },
 }
 
-# Define schemas
-class SourceSchema(BaseModel):
-    name: dict
-    address: dict
+# Validate data
+data = {"name": "Alice", "age": 30, "role": "admin", "tags": ["python"]}
+result = validate(data, schema)
 
-class TargetSchema(BaseModel):
-    full_name: str
-    address: str
-
-# Create type-safe mapper
-person_mapping = Mapper(
-    {
-        "full_name": p.get([
-            "name.first",
-            "name.given[*]",
-            "name.suffix"
-        ]).join(" ", flatten=True),
-
-        "address": p.get([
-            "address.street[*]",
-            "address.city",
-            "address.postal_code",
-            "address.country"
-        ]).join("\n", flatten=True),
-    },
-    min_input_schemas=[SourceSchema],
-    output_schema=TargetSchema,
-)
-
-# Execute
-result = person_mapping(SourceSchema(**source_data))
-assert result == TargetSchema(**target)
+if result.is_ok():
+    print("Valid!", result.value)
+else:
+    for path, msg in result.error:
+        print(f"  {'.'.join(map(str, path))}: {msg}")
 ```
 
-## Core Features
+### Composing Validators
 
-| Component        | Purpose                                                                  |
-| ---------------- | ------------------------------------------------------------------------ |
-| **Mapper**       | Dict→dict transformations with optional schema validation                |
-| **DataMapping**  | Pydantic-validated, type-safe transformations                            |
-| **Partials API** | Composable operators for concise transformation chains                   |
-| **Table**        | Sparse tables with path queries, joins, pandas/polars interop           |
-| **Lexicon**      | Bidirectional code lookups (e.g., LOINC ↔ SNOMED) with metadata         |
-
-## Table & DataFrames
-
-Seamless conversion between chidian Tables and pandas/polars:
-
-```bash
-pip install 'chidian[pandas]'   # pandas support
-pip install 'chidian[polars]'   # polars support
-pip install 'chidian[df]'       # both
-```
+Use `&` (and) and `|` (or) to combine validators:
 
 ```python
-from chidian.table import Table
+from chidian.validation import IsType, Gt, Matches
 
-table = Table([
-    {"name": "Alice", "age": 30},
-    {"name": "Bob", "age": 25}
-])
+# Both must pass
+positive_int = IsType(int) & Gt(0)
 
-df_pd = table.to_pandas(index=True)
-df_pl = table.to_polars(add_index=True)
+# Either can pass
+str_or_int = str | int
+
+# With regex
+email = str & Matches(r"^[\w.-]+@[\w.-]+\.\w+$")
 ```
 
-### Flatten Nested Data
+### Pydantic Integration
 
-Convert nested structures into flat, column-based tables:
+Compile schemas to Pydantic models for runtime validation:
 
 ```python
-table = Table([
-    {"user": {"name": "John", "prefs": ["email", "sms"]}, "id": 123},
-    {"user": {"name": "Jane", "prefs": ["phone"]}, "id": 456}
-])
+User = to_pydantic("User", {
+    "name": Required(str),
+    "email": Optional(str),
+    "age": int,
+})
 
-# Flatten with intuitive path notation
-flat = table.flatten()
-print(flat.columns)
-# {'id', 'user.name', 'user.prefs[0]', 'user.prefs[1]'}
-
-# Export flattened data
-table.to_pandas(flatten=True)
-table.to_polars(flatten=True)
-table.to_csv("flat.csv", flatten=True)
-
-# Control flattening behavior
-table.flatten(max_depth=2, array_index_limit=5)
+user = User(name="Alice", age=30)  # Full Pydantic validation
 ```
 
-**Features:**
-- Path notation: `user.name`, `items[0]`, `data.settings.theme`
-- Handles sparse data (different nesting per row)
-- Special key escaping for dots/brackets
-- Depth and array size controls
+### Built-in Validators
+
+| Validator | Description |
+|-----------|-------------|
+| `Required(v)` | Field cannot be None |
+| `Optional(v)` | Field can be None |
+| `IsType(t)` | Value must be instance of type |
+| `InRange(lo, hi)` | Length must be in range |
+| `InSet(values)` | Value must be in set |
+| `Matches(pattern)` | String must match regex |
+| `Gt`, `Gte`, `Lt`, `Lte` | Numeric comparisons |
+| `Between(lo, hi)` | Value between bounds |
+| `Predicate(fn, msg)` | Custom validation function |
+
+## API Reference
+
+### `@mapper` / `@mapper(remove_empty=True)`
+
+Decorator that transforms a mapping function into a callable mapper.
+
+### `grab(data, path)`
+
+Extract values using dot notation and bracket indexing:
+
+```python
+grab(d, "user.name")           # Nested access
+grab(d, "items[0]")            # List index
+grab(d, "items[-1]")           # Negative index
+grab(d, "users[*].name")       # Map over list
+```
 
 ## Design Philosophy
 
@@ -137,7 +296,7 @@ Built by data engineers, for data engineers. chidian solves common pain points:
 **Solutions:**
 - **Iterate over perfection**: Learn and adapt as you build
 - **Functions as first-class objects**: Compose transformations cleanly
-- **JSON-first**: Simple, universal data structures
+- **Keep things dict-like**: Simple, universal structure that's quick to read
 
 chidian applies functional programming principles to data mappings, drawing inspiration from [Pydantic](https://github.com/pydantic/pydantic), [JMESPath](https://github.com/jmespath), [funcy](https://github.com/Suor/funcy), and others.
 
@@ -147,4 +306,4 @@ Contributions welcome! Open an issue to discuss your idea before submitting a PR
 
 ---
 
-See [tests](/chidian/tests) for more examples.
+See [tests](/tests) for more examples.
