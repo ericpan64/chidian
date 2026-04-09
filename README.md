@@ -9,14 +9,14 @@
 ## Quick Start
 
 ```python
-from chidian import mapper, grab
+from chidian import mapper, getx
 
 @mapper
 def patient_summary(d):
     return {
-        "patient_id": grab(d, "data.patient.id"),
-        "is_active": grab(d, "data.patient.active"),
-        "latest_visit": grab(d, "data.visits[0].date"),
+        "patient_id": getx(d, "data.patient.id"),
+        "is_active": getx(d, "data.patient.active"),
+        "latest_visit": getx(d, "data.visits[0].date"),
     }
 
 source = {
@@ -38,7 +38,7 @@ result = patient_summary(source)
 Write your mapping as the dict you want back:
 
 ```python
-from chidian import mapper, grab, DROP, KEEP
+from chidian import mapper, getx, DROP, KEEP
 
 @mapper
 def normalize_user(d):
@@ -47,16 +47,16 @@ def normalize_user(d):
         "version": "2.0",
 
         # Pull from source
-        "name": grab(d, "user.name"),
+        "name": getx(d, "user.name"),
 
         # Nested output — nest your mapping
         "address": {
-            "city": grab(d, "location.city"),
-            "zip": grab(d, "location.postal"),
+            "city": getx(d, "location.city"),
+            "zip": getx(d, "location.postal"),
         },
 
         # Conditionally drop
-        "risky_field": DROP.THIS_OBJECT if not grab(d, "verified") else grab(d, "data"),
+        "risky_field": DROP.THIS_OBJECT if not getx(d, "verified") else getx(d, "data"),
     }
 ```
 
@@ -69,15 +69,15 @@ from myproject.mappings import normalize_user
 result = normalize_user(raw_data)
 ```
 
-## `grab(data, path)`
+## `getx(data, path)`
 
 Extract values using dot notation and bracket indexing:
 
 ```python
-grab(d, "user.name")           # Nested access
-grab(d, "items[0]")            # List index
-grab(d, "items[-1]")           # Negative index
-grab(d, "users[*].name")       # Map over list
+getx(d, "user.name")           # Nested access
+getx(d, "items[0]")            # List index
+getx(d, "items[-1]")           # Negative index
+getx(d, "users[*].name")       # Map over list
 ```
 
 ## `DROP` — Conditional Removal
@@ -95,7 +95,7 @@ Control what gets excluded from output. `DROP` propagates upward through the str
 @mapper
 def with_drops(d):
     return {
-        "kept": {"id": grab(d, "data.patient.id")},
+        "kept": {"id": getx(d, "data.patient.id")},
         "dropped": {
             "trigger": DROP.THIS_OBJECT,  # This whole dict removed
             "ignored": "never appears",
@@ -162,13 +162,13 @@ def keep_all_empties(d):
 Catch missing keys during development:
 
 ```python
-from chidian import mapper, grab, mapping_context
+from chidian import mapper, getx, mapping_context
 
 @mapper
 def risky_mapping(d):
     return {
-        "id": grab(d, "data.patient.id"),
-        "missing": grab(d, "key.not.found"),  # Doesn't exist
+        "id": getx(d, "data.patient.id"),
+        "missing": getx(d, "key.not.found"),  # Doesn't exist
     }
 
 # Normal — missing keys become empty/removed
@@ -187,8 +187,8 @@ source = {"has_none": None}
 @mapper
 def check_none(d):
     return {
-        "explicit_none": grab(d, "has_none"),      # OK — key exists, value is None
-        "missing": grab(d, "does.not.exist"),      # Raises in strict mode
+        "explicit_none": getx(d, "has_none"),      # OK — key exists, value is None
+        "missing": getx(d, "does.not.exist"),      # Raises in strict mode
     }
 ```
 
@@ -273,15 +273,15 @@ user = User(name="Alice", age=30)  # Full Pydantic validation
 
 Decorator that transforms a mapping function into a callable mapper.
 
-### `grab(data, path)`
+### `getx(data, path)`
 
 Extract values using dot notation and bracket indexing:
 
 ```python
-grab(d, "user.name")           # Nested access
-grab(d, "items[0]")            # List index
-grab(d, "items[-1]")           # Negative index
-grab(d, "users[*].name")       # Map over list
+getx(d, "user.name")           # Nested access
+getx(d, "items[0]")            # List index
+getx(d, "items[-1]")           # Negative index
+getx(d, "users[*].name")       # Map over list
 ```
 
 ## Design Philosophy

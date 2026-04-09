@@ -2,20 +2,20 @@
 
 import pytest
 
-from chidian import DROP, KEEP, grab, mapper, mapping_context
+from chidian import DROP, KEEP, getx, mapper, mapping_context
 
 
 class TestMapperBasic:
     """Test basic @mapper decorator functionality."""
 
     def test_simple_mapping(self):
-        """Test basic mapper with grab."""
+        """Test basic mapper with getx."""
 
         @mapper
         def patient_summary(d):
             return {
-                "patient_id": grab(d, "data.patient.id"),
-                "is_active": grab(d, "data.patient.active"),
+                "patient_id": getx(d, "data.patient.id"),
+                "is_active": getx(d, "data.patient.active"),
             }
 
         source = {"data": {"patient": {"id": "p-123", "active": True}}}
@@ -30,8 +30,8 @@ class TestMapperBasic:
         def with_nested(d):
             return {
                 "patient": {
-                    "id": grab(d, "data.id"),
-                    "name": grab(d, "data.name"),
+                    "id": getx(d, "data.id"),
+                    "name": getx(d, "data.name"),
                 },
                 "meta": {"version": "1.0"},
             }
@@ -52,7 +52,7 @@ class TestMapperBasic:
             return {
                 "version": "2.0",
                 "type": "patient",
-                "id": grab(d, "id"),
+                "id": getx(d, "id"),
             }
 
         result = with_static({"id": "123"})
@@ -63,11 +63,11 @@ class TestMapperBasic:
 
         @mapper
         def first_transform(d):
-            return {"data": {"id": grab(d, "raw_id")}}
+            return {"data": {"id": getx(d, "raw_id")}}
 
         @mapper
         def second_transform(d):
-            return {"patient_id": grab(d, "data.id")}
+            return {"patient_id": getx(d, "data.id")}
 
         source = {"raw_id": "123"}
         result = second_transform(first_transform(source))
@@ -84,7 +84,7 @@ class TestDrop:
         @mapper
         def with_drop(d):
             return {
-                "kept": {"id": grab(d, "id")},
+                "kept": {"id": getx(d, "id")},
                 "dropped": {"trigger": DROP.THIS_OBJECT, "ignored": "x"},
             }
 
@@ -158,12 +158,12 @@ class TestDrop:
 
         @mapper
         def conditional_drop(d):
-            verified = grab(d, "verified")
+            verified = getx(d, "verified")
             return {
-                "id": grab(d, "id"),
+                "id": getx(d, "id"),
                 # Use nested dict so DROP.THIS_OBJECT removes only "sensitive" key
                 "sensitive": {
-                    "data": DROP.THIS_OBJECT if not verified else grab(d, "data"),
+                    "data": DROP.THIS_OBJECT if not verified else getx(d, "data"),
                 },
             }
 
@@ -281,8 +281,8 @@ class TestMappingContext:
         @mapper
         def test_mapping(d):
             return {
-                "exists": grab(d, "data.id"),
-                "missing": grab(d, "does.not.exist"),
+                "exists": getx(d, "data.id"),
+                "missing": getx(d, "does.not.exist"),
             }
 
         result = test_mapping({"data": {"id": "123"}})
@@ -294,8 +294,8 @@ class TestMappingContext:
         @mapper
         def test_mapping(d):
             return {
-                "exists": grab(d, "data.id"),
-                "missing": grab(d, "does.not.exist"),
+                "exists": getx(d, "data.id"),
+                "missing": getx(d, "does.not.exist"),
             }
 
         with pytest.raises(KeyError):
@@ -308,7 +308,7 @@ class TestMappingContext:
         @mapper(remove_empty=False)
         def test_mapping(d):
             return {
-                "has_none": grab(d, "value"),
+                "has_none": getx(d, "value"),
             }
 
         source = {"value": None}
@@ -327,9 +327,9 @@ class TestReadmeExamples:
         @mapper
         def patient_summary(d):
             return {
-                "patient_id": grab(d, "data.patient.id"),
-                "is_active": grab(d, "data.patient.active"),
-                "latest_visit": grab(d, "data.visits[0].date"),
+                "patient_id": getx(d, "data.patient.id"),
+                "is_active": getx(d, "data.patient.active"),
+                "latest_visit": getx(d, "data.visits[0].date"),
             }
 
         source = {
@@ -356,10 +356,10 @@ class TestReadmeExamples:
         def normalize_user(d):
             return {
                 "version": "2.0",
-                "name": grab(d, "user.name"),
+                "name": getx(d, "user.name"),
                 "address": {
-                    "city": grab(d, "location.city"),
-                    "zip": grab(d, "location.postal"),
+                    "city": getx(d, "location.city"),
+                    "zip": getx(d, "location.postal"),
                 },
             }
 

@@ -1,10 +1,10 @@
 """Integration tests for core functionality."""
 
-from chidian import grab
+from chidian import getx
 
 
-def test_grab_function_basic():
-    """Test basic grab functionality."""
+def test_getx_function_basic():
+    """Test basic getx functionality."""
     data = {
         "patient": {
             "id": "123",
@@ -17,9 +17,9 @@ def test_grab_function_basic():
     }
 
     # Basic path access
-    assert grab(data, "patient.id") == "123"
-    assert grab(data, "patient.name.given") == "John"
-    assert grab(data, "patient.contact[0].value") == "555-1234"
+    assert getx(data, "patient.id") == "123"
+    assert getx(data, "patient.name.given") == "John"
+    assert getx(data, "patient.contact[0].value") == "555-1234"
 
     # Array operations
-    assert grab(data, "patient.contact[*].system") == ["phone", "email"]
+    assert getx(data, "patient.contact[*].system") == ["phone", "email"]

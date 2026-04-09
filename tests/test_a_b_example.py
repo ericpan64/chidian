@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from chidian import grab, mapper
+from chidian import getx, mapper
 
 
 class TestABTransformations:
@@ -28,10 +28,10 @@ class TestABTransformations:
 
         def format_address(addr):
             """Format address dict as multiline string."""
-            parts = grab(addr, "street", default=[]) + [
-                grab(addr, "city"),
-                grab(addr, "postal_code"),
-                grab(addr, "country"),
+            parts = getx(addr, "street", default=[]) + [
+                getx(addr, "city"),
+                getx(addr, "postal_code"),
+                getx(addr, "country"),
             ]
             return "\n".join(p for p in parts if p)
 
@@ -39,19 +39,19 @@ class TestABTransformations:
         def a_to_b(d):
             # Build full name from parts
             name_parts = [
-                grab(d, "name.first"),
-                *grab(d, "name.given", default=[]),
-                grab(d, "name.suffix"),
+                getx(d, "name.first"),
+                *getx(d, "name.given", default=[]),
+                getx(d, "name.suffix"),
             ]
             full_name = " ".join(p for p in name_parts if p)
 
             return {
                 "full_name": full_name,
                 "current_address": format_address(
-                    grab(d, "address.current", default={})
+                    getx(d, "address.current", default={})
                 ),
                 "last_previous_address": format_address(
-                    grab(d, "address.previous[-1]", default={})
+                    getx(d, "address.previous[-1]", default={})
                 ),
             }
 
@@ -94,15 +94,15 @@ class TestABTransformations:
 
         @mapper(remove_empty=False)
         def b_to_a(d):
-            name = parse_name(grab(d, "full_name"))
-            current = parse_address(grab(d, "current_address"))
+            name = parse_name(getx(d, "full_name"))
+            current = parse_address(getx(d, "current_address"))
 
             return {
                 "name": name,
                 "address": {
                     "current": current,
                     # Note: B format loses most previous addresses, we only have the last one
-                    "previous": [parse_address(grab(d, "last_previous_address"))],
+                    "previous": [parse_address(getx(d, "last_previous_address"))],
                 },
             }
 
@@ -123,10 +123,10 @@ class TestABTransformations:
         """Test A -> B -> A preserves recoverable data."""
 
         def format_address(addr):
-            parts = grab(addr, "street", default=[]) + [
-                grab(addr, "city"),
-                grab(addr, "postal_code"),
-                grab(addr, "country"),
+            parts = getx(addr, "street", default=[]) + [
+                getx(addr, "city"),
+                getx(addr, "postal_code"),
+                getx(addr, "country"),
             ]
             return "\n".join(p for p in parts if p)
 
@@ -144,23 +144,23 @@ class TestABTransformations:
         @mapper
         def a_to_b(d):
             name_parts = [
-                grab(d, "name.first"),
-                *grab(d, "name.given", default=[]),
-                grab(d, "name.suffix"),
+                getx(d, "name.first"),
+                *getx(d, "name.given", default=[]),
+                getx(d, "name.suffix"),
             ]
             return {
                 "full_name": " ".join(p for p in name_parts if p),
                 "current_address": format_address(
-                    grab(d, "address.current", default={})
+                    getx(d, "address.current", default={})
                 ),
                 "last_previous_address": format_address(
-                    grab(d, "address.previous[-1]", default={})
+                    getx(d, "address.previous[-1]", default={})
                 ),
             }
 
         @mapper(remove_empty=False)
         def b_to_a(d):
-            parts = grab(d, "full_name", default="").split()
+            parts = getx(d, "full_name", default="").split()
             return {
                 "name": {
                     "first": parts[0] if parts else None,
@@ -171,8 +171,8 @@ class TestABTransformations:
                     "suffix": parts[-1] if parts and parts[-1].endswith(".") else None,
                 },
                 "address": {
-                    "current": parse_address(grab(d, "current_address")),
-                    "previous": [parse_address(grab(d, "last_previous_address"))],
+                    "current": parse_address(getx(d, "current_address")),
+                    "previous": [parse_address(getx(d, "last_previous_address"))],
                 },
             }
 

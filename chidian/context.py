@@ -20,18 +20,18 @@ def mapping_context(*, strict: bool = False):
     Context manager for mapping configuration.
 
     Args:
-        strict: If True, grab() raises ValueError on missing keys instead of
+        strict: If True, getx() raises ValueError on missing keys instead of
                returning None. Distinguishes between "key not found" and
                "key exists with None value".
 
     Example:
-        from chidian import mapper, grab, mapping_context
+        from chidian import mapper, getx, mapping_context
 
         @mapper
         def risky_mapping(d):
             return {
-                "id": grab(d, "data.patient.id"),
-                "missing": grab(d, "key.not.found"),  # Doesn't exist
+                "id": getx(d, "data.patient.id"),
+                "missing": getx(d, "key.not.found"),  # Doesn't exist
             }
 
         # Normal — missing keys become None/removed

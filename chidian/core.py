@@ -1,5 +1,5 @@
 """
-Core grab function for chidian data traversal.
+Core getx function for chidian data traversal.
 """
 
 from typing import Any, Callable
@@ -9,7 +9,7 @@ from .lib.core_helpers import apply_functions, traverse_path
 from .lib.parser import parse_path
 
 
-def grab(
+def getx(
     source: dict | list,
     path: str,
     default: Any = None,
@@ -34,14 +34,14 @@ def grab(
 
     Note:
         Strict mode distinguishes between "key not found" and "key exists with None":
-        - {"has_none": None} -> grab(d, "has_none") returns None (OK in strict mode)
-        - {} -> grab(d, "missing") raises KeyError in strict mode
+        - {"has_none": None} -> getx(d, "has_none") returns None (OK in strict mode)
+        - {} -> getx(d, "missing") raises KeyError in strict mode
 
     Examples:
-        grab(d, "user.name")           # Nested access
-        grab(d, "items[0]")            # List index
-        grab(d, "items[-1]")           # Negative index
-        grab(d, "users[*].name")       # Map over list
+        getx(d, "user.name")           # Nested access
+        getx(d, "items[0]")            # List index
+        getx(d, "items[-1]")           # Negative index
+        getx(d, "users[*].name")       # Map over list
     """
     strict = is_strict()
 

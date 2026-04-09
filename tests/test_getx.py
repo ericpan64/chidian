@@ -1,14 +1,14 @@
-"""Tests for the grab function."""
+"""Tests for the getx function."""
 
 from typing import Any
 
 import pytest
 
-from chidian import grab
+from chidian import getx
 
 
-class TestGrabBasic:
-    """Test basic grab operations."""
+class TestgetxBasic:
+    """Test basic getx operations."""
 
     @pytest.mark.parametrize(
         "path,expected_key",
@@ -20,7 +20,7 @@ class TestGrabBasic:
     )
     def test_simple_paths(self, simple_data: dict[str, Any], path: str, expected_key):
         """Test basic dot notation paths."""
-        result = grab(simple_data, path)
+        result = getx(simple_data, path)
 
         # Navigate to expected value
         expected = simple_data
@@ -34,18 +34,18 @@ class TestGrabBasic:
 
     def test_missing_paths(self, simple_data: dict[str, Any]):
         """Test behavior with missing paths."""
-        assert grab(simple_data, "missing") is None
-        assert grab(simple_data, "data.missing") is None
-        assert grab(simple_data, "missing", default="DEFAULT") == "DEFAULT"
+        assert getx(simple_data, "missing") is None
+        assert getx(simple_data, "data.missing") is None
+        assert getx(simple_data, "missing", default="DEFAULT") == "DEFAULT"
 
     def test_apply_function(self, simple_data: dict[str, Any]):
         """Test applying transformation functions."""
-        result = grab(simple_data, "data.patient.id", apply=lambda x: x + "_modified")
+        result = getx(simple_data, "data.patient.id", apply=lambda x: x + "_modified")
         assert result == simple_data["data"]["patient"]["id"] + "_modified"
 
 
-class TestGrabArrays:
-    """Test grab operations on arrays."""
+class TestgetxArrays:
+    """Test getx operations on arrays."""
 
     @pytest.mark.parametrize(
         "path,indices",
@@ -59,13 +59,13 @@ class TestGrabArrays:
         self, simple_data: dict[str, Any], path: str, indices: list[int]
     ):
         """Test single array index access."""
-        result = grab(simple_data, path)
+        result = getx(simple_data, path)
         expected = simple_data["list_data"][indices[0]]["patient"]
         assert result == expected
 
     def test_out_of_bounds_index(self, simple_data: dict[str, Any]):
         """Test behavior with out of bounds indices."""
-        assert grab(simple_data, "list_data[5000].patient") is None
+        assert getx(simple_data, "list_data[5000].patient") is None
 
     @pytest.mark.parametrize(
         "path,slice_params",
@@ -78,26 +78,26 @@ class TestGrabArrays:
     )
     def test_array_slicing(self, simple_data: dict[str, Any], path: str, slice_params):
         """Test array slicing operations."""
-        result = grab(simple_data, path)
+        result = getx(simple_data, path)
         start, stop = slice_params
         expected = simple_data["list_data"][start:stop]
         assert result == expected
 
     def test_slice_then_access(self, simple_data: dict[str, Any]):
         """Test slicing followed by property access."""
-        result = grab(simple_data, "list_data[1:3].patient")
+        result = getx(simple_data, "list_data[1:3].patient")
         expected = [item["patient"] for item in simple_data["list_data"][1:3]]
         assert result == expected
 
     def test_wildcard_on_list(self, list_data: list[Any]):
         """Test wildcard operations on lists."""
-        assert grab(list_data, "[*].patient") == [p["patient"] for p in list_data]
-        assert grab(list_data, "[:].patient.id") == [
+        assert getx(list_data, "[*].patient") == [p["patient"] for p in list_data]
+        assert getx(list_data, "[:].patient.id") == [
             p["patient"]["id"] for p in list_data
         ]
 
 
-class TestGrabEdgeCases:
+class TestgetxEdgeCases:
     """Test edge cases and error conditions."""
 
     @pytest.mark.parametrize(
@@ -113,11 +113,11 @@ class TestGrabEdgeCases:
     )
     def test_none_handling(self, data, path, expected):
         """Test handling of None values."""
-        assert grab(data, path) == expected
+        assert getx(data, path) == expected
 
     def test_nested_arrays(self, deep_nested_list: list[Any]):
         """Test deeply nested array access."""
-        result = grab(deep_nested_list, "[0].patient.list_of_dicts[*].num")
+        result = getx(deep_nested_list, "[0].patient.list_of_dicts[*].num")
         expected = [
             item["num"] for item in deep_nested_list[0]["patient"]["list_of_dicts"]
         ]
@@ -128,25 +128,25 @@ class TestGrabEdgeCases:
         data = {"list": [1, 2, 3], "dict": {"key": "value"}}
 
         # Trying to index a dict - should return None
-        result = grab(data, "dict[0]")
+        result = getx(data, "dict[0]")
         assert result is None
 
         # Trying to access property on list - returns list of None
-        result = grab(data, "list.property")
+        result = getx(data, "list.property")
         assert result == [None, None, None]
 
 
-class TestGrabIntegration:
-    """Integration tests for grab function."""
+class TestgetxIntegration:
+    """Integration tests for getx function."""
 
     def test_fhir_data(self, fhir_bundle: dict[str, Any]):
         """Test with FHIR-like data structures."""
         # Get all observation IDs
-        ids = grab(fhir_bundle, "entry[*].resource.id")
+        ids = getx(fhir_bundle, "entry[*].resource.id")
         assert ids == ["bp-1", "bp-2"]
 
         # Get first observation's systolic value
-        systolic = grab(
+        systolic = getx(
             fhir_bundle, "entry[0].resource.component[0].valueQuantity.value"
         )
         assert systolic == 120
