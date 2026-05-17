@@ -7,13 +7,8 @@ name = "chidian"
 version = "0.3.0"
 requires-python = ">=3.10"
 dependencies = [
-    "parsimonious>=0.10.0",
     "pydantic>=2.10.6,<3.0.0", # Only Pydantic v2 is supported
 ]
-
-[tool.setuptools.package-data]
-# relative to the chidian/lib/ package directory
-"chidian.lib" = ["dsl/*.peg"]
 
 [dependency-groups]
 dev = [
