@@ -2,6 +2,7 @@
 DSL parser using PEG grammar for chidian path expressions.
 """
 
+from functools import lru_cache
 from pathlib import Path as PathLib
 from typing import Any, List, Sequence, Union
 
@@ -42,23 +43,9 @@ class GetDSLVisitor(NodeVisitor):
         self, node: Node, visited_children: Sequence[Any]
     ) -> List[PathSegment]:
         """Entrypoint: handles full expression like 'a[0].b[*].c'"""
-        segments = []
-
-        # Collect all segments from the expression
-        for child in visited_children:
-            if child is None:
-                continue
-            elif isinstance(child, list):
-                # Flatten lists of segments
-                for item in child:
-                    if isinstance(item, PathSegment):
-                        segments.append(item)
-                    elif isinstance(item, list):
-                        segments.extend(s for s in item if isinstance(s, PathSegment))
-            elif isinstance(child, PathSegment):
-                segments.append(child)
-
-        return segments
+        return [
+            s for s in flatten_sequence(visited_children) if isinstance(s, PathSegment)
+        ]
 
     def visit_key(
         self, node: Node, visited_children: Sequence[Any]
@@ -105,21 +92,12 @@ class GetDSLVisitor(NodeVisitor):
 
     def visit_tuple(self, node: Node, visited_children: Sequence[Any]) -> PathSegment:
         """Handle tuple expressions like '(a,b,c)'"""
-        # Extract nested expressions from the tuple
-        paths = []
-
-        # Find all string expressions in the visited children
-        for child in visited_children:
-            if isinstance(child, str):
-                path_segments = _parse_simple_path(child)
-                paths.append(Path(path_segments))
-            elif isinstance(child, list):
-                # Handle comma-separated expressions
-                for item in child:
-                    if isinstance(item, str):
-                        path_segments = _parse_simple_path(item)
-                        paths.append(Path(path_segments))
-
+        # nested_expr children are returned as raw text; parse each one on its own
+        paths = [
+            parse_path_peg(child)
+            for child in flatten_sequence(visited_children)
+            if isinstance(child, str)
+        ]
         return PathSegment.tuple(paths)
 
     def visit_array_access(
@@ -148,6 +126,19 @@ class GetDSLVisitor(NodeVisitor):
             return PathSegment.slice(content.start, content.stop)
         else:
             raise ValueError(f"Unexpected multi_index content: {content}")
+
+    def visit_quoted_key(
+        self, node: Node, visited_children: Sequence[Any]
+    ) -> PathSegment:
+        """Handle quoted keys like '["@id"]' or "['a.b']" """
+        # visited_children = [lbrack, string, rbrack]
+        return PathSegment.key(visited_children[1])
+
+    def visit_dq_string(self, node: Node, visited_children: Sequence[Any]) -> str:
+        return node.text[1:-1]
+
+    def visit_sq_string(self, node: Node, visited_children: Sequence[Any]) -> str:
+        return node.text[1:-1]
 
     def visit_slice(self, node: Node, visited_children: Sequence[Any]) -> slice:
         """Handle slice notation like '[1:10]' or '[:]'"""
@@ -187,61 +178,34 @@ class GetDSLVisitor(NodeVisitor):
             return None
 
 
+def _strip_whitespace(path_str: str) -> str:
+    """Remove whitespace outside of quoted keys."""
+    result = []
+    quote: str | None = None
+    for ch in path_str:
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+        elif ch.isspace():
+            continue
+        result.append(ch)
+    return "".join(result)
+
+
+@lru_cache(maxsize=1024)
 def parse_path_peg(path_str: str) -> Path:
     """Parse a path string into a Path object using PEG grammar."""
     if not path_str:
         raise ValueError("Empty path")
 
-    # Remove whitespace and parse
-    clean_path = path_str.replace(" ", "")
+    clean_path = _strip_whitespace(path_str)
 
     try:
         parsed_tree = GET_DSL_GRAMMAR.parse(clean_path)
         segments = GetDSLVisitor().visit(parsed_tree)
-
-        if isinstance(segments, list):
-            return Path(segments)
-        else:
-            return Path([segments])
     except Exception as e:
         raise ValueError(f"Parse error: {e}") from e
 
-
-# For recursive parsing in tuples, avoid infinite recursion
-def _parse_simple_path(path_str: str) -> List[PathSegment]:
-    """Simple path parsing for use within tuples to avoid recursion."""
-    if not path_str:
-        return []
-
-    # For tuple contents, use a simpler approach
-    parts = path_str.split(".")
-    segments = []
-
-    for part in parts:
-        # Check for array notation
-        if "[" in part and "]" in part:
-            # Extract key and index/slice
-            key_part = part[: part.index("[")]
-            bracket_part = part[part.index("[") : part.rindex("]") + 1]
-
-            if key_part:
-                segments.append(PathSegment.key(key_part))
-
-            # Parse bracket content
-            bracket_content = bracket_part[1:-1]  # Remove [ ]
-            if bracket_content == "*":
-                segments.append(PathSegment.wildcard())
-            elif ":" in bracket_content:
-                # Slice
-                parts = bracket_content.split(":")
-                start = int(parts[0]) if parts[0] else None
-                end = int(parts[1]) if parts[1] else None
-                segments.append(PathSegment.slice(start, end))
-            else:
-                # Index
-                segments.append(PathSegment.index(int(bracket_content)))
-        else:
-            # Simple key
-            segments.append(PathSegment.key(part))
-
-    return segments
+    return Path(segments)

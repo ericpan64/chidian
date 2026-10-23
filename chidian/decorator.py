@@ -3,12 +3,27 @@ The @mapper decorator for transforming functions into data mappers.
 """
 
 from functools import wraps
-from typing import Any, Callable
+from typing import Callable, ParamSpec, TypeVar, overload
 
 from .process import process_output
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
-def mapper(_func: Callable | None = None, *, remove_empty: bool = True) -> Callable:
+
+@overload
+def mapper(_func: Callable[P, R], *, remove_empty: bool = True) -> Callable[P, R]: ...
+
+
+@overload
+def mapper(
+    _func: None = None, *, remove_empty: bool = True
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
+
+
+def mapper(
+    _func: Callable[P, R] | None = None, *, remove_empty: bool = True
+) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
     """
     Decorator that transforms a mapping function into a callable mapper.
 
@@ -32,9 +47,9 @@ def mapper(_func: Callable | None = None, *, remove_empty: bool = True) -> Calla
         Decorated function that processes its output through the mapper pipeline.
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             # Call the original function to get the raw mapping result
             result = func(*args, **kwargs)
 

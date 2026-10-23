@@ -5,7 +5,7 @@ Core grab function for chidian data traversal.
 from typing import Any, Callable
 
 from .context import is_strict
-from .lib.core_helpers import apply_functions, traverse_path
+from .lib.core_helpers import MISSING, apply_functions, traverse_path
 from .lib.parser import parse_path
 
 
@@ -21,16 +21,20 @@ def grab(
     Args:
         source: Source data to traverse
         path: Path string (e.g., "data.items[0].name")
-        default: Default value if path not found
-        apply: Function(s) to apply to the result
+        default: Default value if path not found. An existing key whose
+                 value is None is returned as None, not replaced by default.
+        apply: Function(s) to apply to the result. In non-strict mode a
+               function that raises yields None; in strict mode it raises.
 
     Returns:
-        Value at path or default if not found
+        Value at path or default if not found. Paths that fan out over a
+        list (e.g. "users[*].name") always return a list.
 
     Raises:
         KeyError: In strict mode, if a dict key is not found
         IndexError: In strict mode, if a list index is out of range
         TypeError: In strict mode, if a type mismatch occurs during traversal
+        Exception: In strict mode, anything raised by an `apply` function
 
     Note:
         Strict mode distinguishes between "key not found" and "key exists with None":
@@ -57,14 +61,14 @@ def grab(
     except Exception:
         if strict:
             raise
-        result = None
+        result = MISSING
 
-    # Handle default value
-    if result is None and default is not None:
+    # Handle default value (only when the path doesn't exist)
+    if result is MISSING:
         result = default
 
     # Apply functions if provided
     if apply is not None and result is not None:
-        result = apply_functions(result, apply)
+        result = apply_functions(result, apply, strict=strict)
 
     return result
