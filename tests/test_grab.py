@@ -150,3 +150,89 @@ class TestGrabIntegration:
             fhir_bundle, "entry[0].resource.component[0].valueQuantity.value"
         )
         assert systolic == 120
+
+
+class TestGrabShape:
+    """Fan-out paths always return lists, regardless of list length."""
+
+    @pytest.mark.parametrize(
+        "data,expected",
+        [
+            ({"u": [{"n": "a"}]}, ["a"]),
+            ({"u": [{"n": "a"}, {"n": "b"}]}, ["a", "b"]),
+            ({"u": []}, []),
+            ({"u": [{"x": 1}]}, [None]),
+        ],
+    )
+    def test_wildcard_returns_list(self, data, expected):
+        assert grab(data, "u[*].n") == expected
+
+    def test_key_over_single_item_list_returns_list(self):
+        assert grab({"u": [{"n": "a"}]}, "u.n") == ["a"]
+
+    def test_wildcard_on_single_item_list(self):
+        assert grab({"u": [5]}, "u[*]") == [5]
+
+    def test_non_fanout_paths_return_scalars(self):
+        data = {"u": [{"n": "a"}]}
+        assert grab(data, "u[0].n") == "a"
+        assert grab(data, "u[0:1]") == [{"n": "a"}]
+
+    def test_wildcard_on_non_list(self):
+        assert grab({"u": 5}, "u[*]") is None
+
+
+class TestGrabQuotedKeys:
+    """Quoted bracket keys reach keys that aren't valid bare names."""
+
+    @pytest.mark.parametrize(
+        "data,path,expected",
+        [
+            ({"@id": 1}, '["@id"]', 1),
+            ({"x": {"@id": 1}}, 'x["@id"]', 1),
+            ({"x": {"a.b": 1}}, "x['a.b']", 1),
+            ({"x": {"a b": 1}}, 'x["a b"]', 1),
+            ({"0": {"y": 1}}, '["0"].y', 1),
+            ({"x": {"@type": [{"v": 1}]}}, 'x["@type"][0].v', 1),
+            ({"x": [{"@id": 1}, {"@id": 2}]}, 'x[*]["@id"]', [1, 2]),
+            ({"a": 1, "@b": 2}, '(a, ["@b"])', (1, 2)),
+        ],
+    )
+    def test_quoted_keys(self, data, path, expected):
+        assert grab(data, path) == expected
+
+    def test_whitespace_outside_quotes_ignored(self):
+        assert grab({"x": [{"y": 1}]}, "x [ 0 ] . y") == 1
+
+
+class TestGrabDefault:
+    """default applies only when the path doesn't exist."""
+
+    def test_default_not_used_for_explicit_none(self):
+        assert grab({"x": None}, "x", default=9) is None
+
+    def test_default_used_for_missing(self):
+        assert grab({}, "x", default=9) == 9
+        assert grab({"x": None}, "x.y", default=9) == 9
+        assert grab({"x": []}, "x[0]", default=9) == 9
+
+    def test_default_keeps_falsy_values(self):
+        assert grab({"x": 0}, "x", default=9) == 0
+        assert grab({"x": ""}, "x", default=9) == ""
+
+
+class TestGrabApply:
+    """apply errors are lenient by default and raise in strict mode."""
+
+    def test_apply_error_returns_none(self):
+        assert grab({"x": "z"}, "x", apply=int) is None
+
+    def test_apply_error_raises_in_strict_mode(self):
+        from chidian import mapping_context
+
+        with mapping_context(strict=True):
+            with pytest.raises(ValueError):
+                grab({"x": "z"}, "x", apply=int)
+
+    def test_apply_chain(self):
+        assert grab({"x": "5"}, "x", apply=[int, lambda v: v * 2]) == 10

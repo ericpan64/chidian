@@ -51,6 +51,16 @@ def process_output(data: Any, remove_empty: bool = True) -> Any:
             return None
 
 
+def process_drops(data: Any) -> Any:
+    """
+    Process a data structure, handling DROP sentinels and unwrapping KEEPs.
+
+    Equivalent to `process_output(data, remove_empty=False)`.
+    If DROP propagates to the top level, returns {} for dict input or [] for list input.
+    """
+    return process_output(data, remove_empty=False)
+
+
 def _process_value(data: Any, remove_empty: bool) -> Any:
     """Internal processor that may raise _DropSignal."""
     # Handle DROP sentinel

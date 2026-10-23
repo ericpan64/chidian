@@ -374,3 +374,18 @@ class TestReadmeExamples:
             "name": "John",
             "address": {"city": "Boston", "zip": "02101"},
         }
+
+
+class TestProcessDrops:
+    """process_drops handles DROP without removing empties."""
+
+    def test_process_drops(self):
+        from chidian import process_drops
+
+        data = {
+            "a": {"x": DROP.THIS_OBJECT},
+            "b": [1, DROP.THIS_OBJECT, 2],
+            "c": {},
+            "d": KEEP(None),
+        }
+        assert process_drops(data) == {"b": [1, 2], "c": {}, "d": None}

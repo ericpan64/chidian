@@ -78,6 +78,27 @@ grab(d, "user.name")           # Nested access
 grab(d, "items[0]")            # List index
 grab(d, "items[-1]")           # Negative index
 grab(d, "users[*].name")       # Map over list
+grab(d, 'resource["@id"]')     # Quoted key (for keys like "@id", "a.b", "0")
+```
+
+Paths that map over a list (`[*]`, or a key applied to a list) always return a list, even when the list has one item:
+
+```python
+grab({"users": [{"name": "a"}]}, "users[*].name")  # ["a"]
+```
+
+`default` is used only when the path doesn't exist. A key that exists with a `None` value returns `None`:
+
+```python
+grab({}, "x", default=0)             # 0
+grab({"x": None}, "x", default=0)    # None
+```
+
+`apply` runs function(s) on the result. If a function raises, `grab` returns `None` (or raises, in [strict mode](#strict-mode)):
+
+```python
+grab({"age": "42"}, "age", apply=int)   # 42
+grab({"age": "n/a"}, "age", apply=int)  # None
 ```
 
 ## `DROP` — Conditional Removal
@@ -178,6 +199,8 @@ result = risky_mapping(source)
 with mapping_context(strict=True):
     risky_mapping(source)  # KeyError!
 ```
+
+Strict mode also re-raises exceptions from `grab(..., apply=...)` functions instead of returning `None`.
 
 **Note**: Strict mode distinguishes between "key not found" and "key exists with `None` value":
 
@@ -282,6 +305,27 @@ grab(d, "user.name")           # Nested access
 grab(d, "items[0]")            # List index
 grab(d, "items[-1]")           # Negative index
 grab(d, "users[*].name")       # Map over list
+grab(d, 'resource["@id"]')     # Quoted key (for keys like "@id", "a.b", "0")
+```
+
+Paths that map over a list (`[*]`, or a key applied to a list) always return a list, even when the list has one item:
+
+```python
+grab({"users": [{"name": "a"}]}, "users[*].name")  # ["a"]
+```
+
+`default` is used only when the path doesn't exist. A key that exists with a `None` value returns `None`:
+
+```python
+grab({}, "x", default=0)             # 0
+grab({"x": None}, "x", default=0)    # None
+```
+
+`apply` runs function(s) on the result. If a function raises, `grab` returns `None` (or raises, in [strict mode](#strict-mode)):
+
+```python
+grab({"age": "42"}, "age", apply=int)   # 42
+grab({"age": "n/a"}, "age", apply=int)  # None
 ```
 
 ## Design Philosophy

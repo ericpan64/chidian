@@ -1,9 +1,9 @@
 from .context import mapping_context
 from .core import grab
 from .decorator import mapper
-from .drop import DROP, process_drops
+from .drop import DROP
 from .keep import KEEP
-from .process import process_output
+from .process import process_drops, process_output
 
 __all__ = [
     "grab",
